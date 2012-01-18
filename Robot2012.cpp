@@ -1,46 +1,79 @@
-#include "WPILib.h"
-#include "SimpleCRobot.h"
-#include "CRobotDrive.h"
 #include "Robot2012.h"
+#include "Vision/AxisCamera.h"
 
-#define FRONT_LEFT_MOTOR_PORT 0
-#define FRONT_RIGHT_MOTOR_PORT 0
-#define REAR_LEFT_MOTOR_PORT 0
-#define REAR_RIGHT_MOTOR_PORT 0
+//AxisCamera *camera;
 
-#define LOWER_ROLLER_PORT 0
-#define UPPER_ROLLER_PORT 0
-#define CATAPULT_THROW 0
-#define CATAPULT_WITHDRAW 0
-
-static const UINT32 LEFT_MOTOR_PORT = 1;
-static const UINT32 RIGHT_MOTOR_PORT = 2;
-static const UINT32 JOYSTICK_PORT = 1;
-
-void Initialize(void)
+Robot2012::Robot2012(void):
+		myRobot(1, 2),	// these must be initialized in the same order
+		stickRightDrive(1),		// as they are declared above
+		stickLeftDrive(2),
+		stickShooter(3)
 {
-	CreateRobotDrive(FRONT_LEFT_MOTOR_PORT, REAR_LEFT_MOTOR_PORT, 
-			FRONT_RIGHT_MOTOR_PORT, REAR_RIGHT_MOTOR_PORT);
-	SetWatchdogExpiration(0.1);
+	myRobot.SetExpiration(0.1);
+	//camera = *(AxisCamera::GetInstance("10.24.74.11"));
 }
 
-void Autonomous(void)
+void Robot2012::StartCompetition()
 {
-	SetWatchdogEnabled(false);
-	Drive(0.5, 0.0);
-	Wait(2.0);
-	Drive(0.0, 0.0);
+	
 }
 
-void OperatorControl(void)
+void Robot2012::RobotInit()
 {
-	SetWatchdogEnabled(true);
-	while (IsOperatorControl())
-	{
-		WatchdogFeed();
-		ArcadeDrive(JOYSTICK_PORT);
-		Wait(0.005);
-	}
+	
 }
 
-START_ROBOT_CLASS(SimpleCRobot);
+void Robot2012::DisabledInit()
+{
+	
+}
+
+void Robot2012::AutonomousInit()
+{
+	
+}
+
+void Robot2012::TeleopInit()
+{
+	
+}
+
+void Robot2012::DisabledPeriodic()
+{
+	
+}
+
+void Robot2012::AutonomousPeriodic()
+{
+	AxisCamera &camera = AxisCamera::GetInstance();
+	myRobot.SetSafetyEnabled(false);
+//	myRobot.Drive(0.5, 0.0); 	// drive forwards half speed
+//	Wait(2.0); 				//    for 2 seconds
+//	myRobot.Drive(0.0, 0.0); 	// stop robot
+}
+
+void Robot2012::TeleopPeriodic()
+{
+	AxisCamera &camera = AxisCamera::GetInstance();
+	myRobot.SetSafetyEnabled(true);
+	myRobot.TankDrive(stickLeftDrive, stickRightDrive); // drive with arcade style (use right stick)
+	
+}
+
+void Robot2012::DisabledContinuous()
+{
+	
+}
+
+void Robot2012::AutonomousContinuous()
+{
+	
+}
+
+void Robot2012::TeleopContinuous()
+{
+	
+}
+
+START_ROBOT_CLASS(Robot2012);
+
