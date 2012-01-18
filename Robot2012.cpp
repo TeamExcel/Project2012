@@ -20,22 +20,28 @@ void Robot2012::StartCompetition()
 
 void Robot2012::RobotInit()
 {
-	
+
+	myRobot.SetSafetyEnabled(false);	
 }
 
 void Robot2012::DisabledInit()
 {
-	
+
+	myRobot.SetSafetyEnabled(false);
 }
 
 void Robot2012::AutonomousInit()
 {
-	
+
+	myRobot.SetSafetyEnabled(false);
 }
 
 void Robot2012::TeleopInit()
 {
-	
+
+	myRobot.SetSafetyEnabled(false);
+	//myRobot.SetExpiration(0.1);
+	//myRobot.SetSafetyEnabled(true);
 }
 
 void Robot2012::DisabledPeriodic()
@@ -55,9 +61,6 @@ void Robot2012::AutonomousPeriodic()
 void Robot2012::TeleopPeriodic()
 {
 	AxisCamera &camera = AxisCamera::GetInstance();
-	myRobot.SetSafetyEnabled(true);
-	myRobot.TankDrive(stickLeftDrive, stickRightDrive); // drive with arcade style (use right stick)
-	
 }
 
 void Robot2012::DisabledContinuous()
@@ -72,7 +75,8 @@ void Robot2012::AutonomousContinuous()
 
 void Robot2012::TeleopContinuous()
 {
-	
+	myRobot.TankDrive(stickLeftDrive, stickRightDrive); // drive with arcade style (use right stick)
+
 }
 
 START_ROBOT_CLASS(Robot2012);
