@@ -4,6 +4,8 @@
 class Robot2012 : public IterativeRobot
 {
 private:
+	Jaguar jaguarFrontLeft;
+	Jaguar jaguarFrontRight;
 	RobotDrive myRobot; // robot drive system
 	Joystick stickRightDrive; // only joystick
 	Joystick stickLeftDrive;
