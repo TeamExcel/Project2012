@@ -1,12 +1,16 @@
 #include "WPILib.h"
 //#include "Robot2012.h"
 #include "Vision/AxisCamera.h"
+#include "nivision.h"
+#include "ImageProcessing.h"
 ////////////////////////////////////////////////////////
 // Defines and typedefs
 ////////////////////////////////////////////////////////
 #define ANALOG_OUTPUT_CHANNEL 1		//in 2012 this should be in slot 1 (chan 1), or slot 5 (chan 2)
 #define DIGITAL_OUTPUT_CHANNEL 1	//in 2012 this should be in slot 3 (chan 1), or slot 7 (chan 2)
 #define PNEUMATIC_OUTPUT_CHANNEL 1	//in 2012 this should be in slot 2 (chan 1), or slot 6 (chan 2)
+
+#define CAMERA_MAX_FPS 5
 
 #define AXIS_CAMERA_CONNECTED_TO_CRIO
 //TODO setup IPs for the camera based on this #define
@@ -157,11 +161,33 @@ public:
 
 	void AutonomousContinuous(void)	
 	{
+		AxisCamera &camera = AxisCamera::GetInstance("10.24.74.11");
+		if (camera.GetMaxFPS() != CAMERA_MAX_FPS)
+		{
+			camera.WriteMaxFPS(CAMERA_MAX_FPS);
+		}
 	}
-
 	void TeleopContinuous(void) 
 	{
 		AxisCamera &camera = AxisCamera::GetInstance("10.24.74.11");
+		if (camera.GetMaxFPS() != CAMERA_MAX_FPS)
+		{
+			camera.WriteMaxFPS(CAMERA_MAX_FPS);
+		}
+		if (camera.IsFreshImage())
+		{
+			ColorImage *colorImage = new ColorImage(IMAQ_IMAGE_RGB);
+			camera.GetImage(colorImage);
+			Image *image = colorImage->GetImaqImage();
+			IVA_Data *ivaData = IVA_InitData(4, 0);
+			
+			IVA_ProcessImage(image, ivaData);
+			
+			//TODO retrieve useful data from ivaData
+			
+			IVA_DisposeData(ivaData);
+			
+		}
 	}
 
 				
