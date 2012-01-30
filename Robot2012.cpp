@@ -150,7 +150,11 @@ public:
 	{
 		// increment the number of teleop periodic loops completed
 		m_telePeriodicLoops++;
-		myRobot.TankDrive(stickLeftDrive,stickRightDrive);	
+		if (!stickRightDrive.GetTrigger())
+		{
+			myRobot.SetSafetyEnabled(true);
+			myRobot.TankDrive(stickLeftDrive,stickRightDrive);	
+		}
 	}
 
 
@@ -178,15 +182,56 @@ public:
 		{
 			ColorImage *colorImage = new ColorImage(IMAQ_IMAGE_RGB);
 			camera.GetImage(colorImage);
-			Image *image = colorImage->GetImaqImage();
-			IVA_Data *ivaData = IVA_InitData(4, 0);
-			
-			IVA_ProcessImage(image, ivaData);
-			
-			//TODO retrieve useful data from ivaData
-			
-			IVA_DisposeData(ivaData);
-			
+			if (stickRightDrive.GetTrigger())
+			{
+				myRobot.SetSafetyEnabled(false);
+				Image *image;// = colorImage->GetImaqImage();
+				IVA_Data *ivaData = IVA_InitData(4, 0);
+				if (stickRightDrive.GetTop())
+				{
+					colorImage->Write("capturedImage.jpg");
+					BinaryImage *binaryImage = colorImage->ThresholdHSV(56, 125, 55, 255, 255, 150);
+					image = binaryImage->GetImaqImage();
+					binaryImage->Write("afterCLRThreshold.bmp");
+					IVA_ProcessImage(image, ivaData, binaryImage);
+				}
+				else
+				{
+					//colorImage->Write("capturedImage.jpg");
+					BinaryImage *binaryImage = colorImage->ThresholdHSV(56, 125, 55, 255, 255, 150);
+					image = binaryImage->GetImaqImage();
+					IVA_ProcessImage(image, ivaData, (ImageBase *)0);
+				}
+				
+				//TODO retrieve useful data from ivaData
+				int numSteps = ivaData->numSteps;
+				for (int step = 0; step < numSteps; step++)
+				{
+					int numOfResults = ivaData->stepResults[step].numResults;
+					for (int resultIndex = 0; resultIndex < numOfResults; resultIndex++)
+					{
+						//Save the current result into a pointer to be more efficient/readable
+						IVA_Result *result = &(ivaData->stepResults[step].results[resultIndex]);
+						if (strcmp(result->resultName, "Center of Mass X") == 0)
+						{
+							double centerOfMass = result->resultVal.numVal;
+							
+							//if the image has the target left of center
+							if (centerOfMass < 150.0F)
+							{
+								jaguarFrontLeft.Set(-.05F);
+								jaguarFrontRight.Set(.05F);
+							}
+							else if (centerOfMass > 170.0F)
+							{
+								jaguarFrontLeft.Set(.05F);
+								jaguarFrontRight.Set(-.05F);
+							}
+						}
+					}
+				}
+				IVA_DisposeData(ivaData);
+			}
 		}
 	}
 

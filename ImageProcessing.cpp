@@ -76,7 +76,7 @@ static int IVA_Particle(Image* image,
 								 IVA_Data* ivaData,
 								 int stepIndex);
 
-int IVA_ProcessImage(Image *image, IVA_Data_Struct *ivaData)
+int IVA_ProcessImage(Image *image, IVA_Data_Struct *ivaData, ImageBase *baseImage)
 {
 	int success = 1;
 	//IVA_Data *ivaData;
@@ -88,26 +88,27 @@ int IVA_ProcessImage(Image *image, IVA_Data_Struct *ivaData)
 	int pPixelMeasurements[28] = {0,1,2,3,4,5,6,7,16,17,18,26,27,28,
 		38,39,41,42,43,45,48,49,50,51,85,86,87,88};
 	int *pCalibratedMeasurements = 0;
-
+	//if (baseImage) baseImage->Write("capturedImage.jpg");
 	// Initializes internal data (buffers and array of points for caliper measurements)
 	//VisionErrChk(ivaData = IVA_InitData(4, 0));
 
-	VisionErrChk(IVA_CLRThreshold(image, 56, 125, 55, 255, 150, 255, 
-		IMAQ_HSV));
-
+	//VisionErrChk(IVA_CLRThreshold(image, 56, 125, 55, 255, 150, 255, 
+	//	IMAQ_HSV));
+	//if (baseImage) baseImage->Write("afterCLRThreshold.jpg");
 	//-------------------------------------------------------------------//
 	//                  Advanced Morphology: Convex Hull                 //
 	//-------------------------------------------------------------------//
 
 	// Computes the convex envelope for each labeled particle in the source image.
 	VisionErrChk(imaqConvexHull(image, image, TRUE));
-
+	if (baseImage) baseImage->Write("afterConvexHull.bmp");
 	VisionErrChk(IVA_ParticleFilter(image, pParameter, plower, pUpper, 
 		pCalibrated, pExclude, 2, FALSE, TRUE));
+	if (baseImage) baseImage->Write("afterParticleFilter.bmp");
 
 	VisionErrChk(IVA_Particle(image, TRUE, pPixelMeasurements, 28, 
 		pCalibratedMeasurements, 0, ivaData, 3));
-
+	if (baseImage) baseImage->Write("finalImage.bmp");
 	// Releases the memory allocated in the IVA_Data structure.
 	//IVA_DisposeData(ivaData);
 

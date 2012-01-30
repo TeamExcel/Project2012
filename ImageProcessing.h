@@ -6,6 +6,7 @@
 #ifndef IMAGEPROCESSING_TASK_INCLUDE
 #define IMAGEPROCESSING_TASK_INCLUDE
 #include <nivision.h>
+#include <Vision/ImageBase.h>
 //#include <nimachinevision.h>
 
 #ifdef __cplusplus
@@ -18,7 +19,11 @@
 	#define BOOL bool
 #endif
 	
-typedef enum IVA_ResultType_Enum {IVA_NUMERIC, IVA_BOOLEAN, IVA_STRING} IVA_ResultType;
+typedef enum IVA_ResultType_Enum {
+	IVA_NUMERIC, 
+	IVA_BOOLEAN, 
+	IVA_STRING
+} IVA_ResultType;
 
 typedef union IVA_ResultValue_Struct    // A result in Vision Assistant can be of type double, BOOL or string.
 {
@@ -58,7 +63,7 @@ typedef struct IVA_Data_Struct
 
 	
 	
-int IVA_ProcessImage(Image *image, IVA_Data_Struct *ivaData);
+int IVA_ProcessImage(Image *image, IVA_Data_Struct *ivaData, ImageBase *baseImage);
 int IVA_DisposeData(IVA_Data* ivaData);
 IVA_Data* IVA_InitData(int numSteps, int numCoordSys);
 
