@@ -92,6 +92,7 @@ public:
 		printf("RobotInit() completed.\n");
 		
 		timeSinceBoot.Start();
+		myRobot.SetExpiration(1.0);
 	}
 	
 	void DisabledInit(void) 
@@ -152,8 +153,8 @@ public:
 		m_telePeriodicLoops++;
 		if (!stickRightDrive.GetTrigger())
 		{
-			myRobot.SetSafetyEnabled(true);
 			myRobot.TankDrive(stickLeftDrive,stickRightDrive);	
+			myRobot.SetSafetyEnabled(true);
 		}
 	}
 
@@ -180,57 +181,52 @@ public:
 		}
 		if (camera.IsFreshImage())
 		{
-			ColorImage *colorImage = new ColorImage(IMAQ_IMAGE_RGB);
+			ColorImage *colorImage = new ColorImage(IMAQ_IMAGE_HSL);
+			BinaryImage *binaryImage;
 			camera.GetImage(colorImage);
 			if (stickRightDrive.GetTrigger())
 			{
 				myRobot.SetSafetyEnabled(false);
-				Image *image;// = colorImage->GetImaqImage();
-				IVA_Data *ivaData = IVA_InitData(4, 0);
+				Image *image;
 				if (stickRightDrive.GetTop())
 				{
 					colorImage->Write("capturedImage.jpg");
-					BinaryImage *binaryImage = colorImage->ThresholdHSV(56, 125, 55, 255, 255, 150);
+					//binaryImage = colorImage->ThresholdHSV(0, 255, 0, 255, 255, 0);
+					//binaryImage = colorImage->ThresholdHSV(56, 125, 55, 255, 255, 150);
+					binaryImage = colorImage->ThresholdHSL(66, 255,104, 255, 76, 255);
+					delete colorImage;
 					image = binaryImage->GetImaqImage();
 					binaryImage->Write("afterCLRThreshold.bmp");
-					IVA_ProcessImage(image, ivaData, binaryImage);
+					IVA_ProcessImage(image, binaryImage);
 				}
 				else
 				{
-					//colorImage->Write("capturedImage.jpg");
-					BinaryImage *binaryImage = colorImage->ThresholdHSV(56, 125, 55, 255, 255, 150);
+					//binaryImage = colorImage->ThresholdHSV(0, 255, 0, 255, 255, 0);
+					//binaryImage = colorImage->ThresholdHSV(56, 125, 55, 255, 255, 150);
+					binaryImage = colorImage->ThresholdHSL(66, 255,104, 255, 76, 255);
+					delete colorImage;
 					image = binaryImage->GetImaqImage();
-					IVA_ProcessImage(image, ivaData, (ImageBase *)0);
+					IVA_ProcessImage(image, (ImageBase *)0);
 				}
-				
-				//TODO retrieve useful data from ivaData
-				int numSteps = ivaData->numSteps;
-				for (int step = 0; step < numSteps; step++)
+//				vector<ParticleAnalysisReport> *reports = binaryImage->GetOrderedParticleAnalysisReports();
+//				if (reports->size() > 0)
+				if (binaryImage->GetNumberParticles() > 0)
 				{
-					int numOfResults = ivaData->stepResults[step].numResults;
-					for (int resultIndex = 0; resultIndex < numOfResults; resultIndex++)
+					int centerOfMassX = binaryImage->GetParticleAnalysisReport(0).center_mass_x;
+					//int centerOfMassX = (*reports)[0].center_mass_x;
+					if (centerOfMassX < 150)
 					{
-						//Save the current result into a pointer to be more efficient/readable
-						IVA_Result *result = &(ivaData->stepResults[step].results[resultIndex]);
-						if (strcmp(result->resultName, "Center of Mass X") == 0)
-						{
-							double centerOfMass = result->resultVal.numVal;
-							
-							//if the image has the target left of center
-							if (centerOfMass < 150.0F)
-							{
-								jaguarFrontLeft.Set(-.05F);
-								jaguarFrontRight.Set(.05F);
-							}
-							else if (centerOfMass > 170.0F)
-							{
-								jaguarFrontLeft.Set(.05F);
-								jaguarFrontRight.Set(-.05F);
-							}
-						}
+						jaguarFrontLeft.Set(-.25);
+						jaguarFrontRight.Set(-.25);
+					}
+					else if (centerOfMassX > 170)
+					{
+						jaguarFrontLeft.Set(.25);
+						jaguarFrontRight.Set(.25);
 					}
 				}
-				IVA_DisposeData(ivaData);
+				delete binaryImage;
+				//delete reports;
 			}
 		}
 	}
