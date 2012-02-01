@@ -12,6 +12,9 @@
 
 #define CAMERA_MAX_FPS 5
 
+#define SLOW_TURN 0.25F
+#define FAST_TURN 0.35F
+
 #define AXIS_CAMERA_CONNECTED_TO_CRIO
 //TODO setup IPs for the camera based on this #define
 
@@ -20,8 +23,8 @@ typedef enum
 {
 	PWM_CHANNEL_1_JAGUAR_FRONT_LEFT = 1,
 	PWM_CHANNEL_2_JAGUAR_FRONT_RIGHT,
-	PWM_CHANNEL_3_UNUSED,
-	PWM_CHANNEL_4_UNUSED,
+	PWM_CHANNEL_3_JAGUAR_REAR_LEFT,
+	PWM_CHANNEL_4_JAGUAR_REAR_RIGHT,
 	PWM_CHANNEL_5_UNUSED,
 	PWM_CHANNEL_6_UNUSED,
 	PWM_CHANNEL_7_UNUSED,
@@ -48,6 +51,8 @@ class Robot2012 : public IterativeRobot
 	UINT32 m_autoPeriodicLoops;
 	UINT32 m_disabledPeriodicLoops;
 	UINT32 m_telePeriodicLoops;
+	
+	bool cameraInitialized;
 		
 public:
 
@@ -62,7 +67,7 @@ public:
 		timeSinceBoot()
 	{
 		printf("Robot2012 Constructor Started\n");
-
+		cameraInitialized = false;
 		// Acquire the Driver Station object
 		driverStation = DriverStation::GetInstance();
 
@@ -107,6 +112,8 @@ public:
 		timeInState.Reset();
 		timeInState.Start();
 		m_autoPeriodicLoops = 0;				// Reset the loop counter for autonomous mode
+		myRobot.SetInvertedMotor(myRobot.kFrontLeftMotor, true);
+		myRobot.SetInvertedMotor(myRobot.kFrontRightMotor, true);
 	}
 
 	void TeleopInit(void) 
@@ -114,6 +121,8 @@ public:
 		m_telePeriodicLoops = 0;				// Reset the loop counter for teleop mode
 		timeInState.Reset();
 		timeInState.Start();
+		myRobot.SetInvertedMotor(myRobot.kFrontLeftMotor, true);
+		myRobot.SetInvertedMotor(myRobot.kFrontRightMotor, true);
 	}
 
 	/********************************** Periodic Routines *************************************/
@@ -154,7 +163,21 @@ public:
 		if (!stickRightDrive.GetTrigger())
 		{
 			myRobot.TankDrive(stickLeftDrive,stickRightDrive);	
-			myRobot.SetSafetyEnabled(true);
+			//myRobot.SetSafetyEnabled(true);
+			myRobot.SetSafetyEnabled(false);
+		}
+		CameraInitialize();
+		AxisCamera &camera = AxisCamera::GetInstance("10.24.74.11");
+
+		if (camera.IsFreshImage())
+		{
+			ColorImage *colorImage = new ColorImage(IMAQ_IMAGE_HSL);
+			camera.GetImage(colorImage);
+			if (stickRightDrive.GetTrigger())
+			{
+				FaceTarget(colorImage);
+			}
+			delete colorImage;
 		}
 	}
 
@@ -162,76 +185,107 @@ public:
 /********************************** Continuous Routines *************************************/
 	void DisabledContinuous(void) 
 	{
+		//CameraInitialize();
 	}
 
 	void AutonomousContinuous(void)	
 	{
-		AxisCamera &camera = AxisCamera::GetInstance("10.24.74.11");
-		if (camera.GetMaxFPS() != CAMERA_MAX_FPS)
-		{
-			camera.WriteMaxFPS(CAMERA_MAX_FPS);
-		}
+		//AxisCamera &camera = AxisCamera::GetInstance("10.24.74.11");
+		//CameraInitialize();
 	}
 	void TeleopContinuous(void) 
 	{
-		AxisCamera &camera = AxisCamera::GetInstance("10.24.74.11");
-		if (camera.GetMaxFPS() != CAMERA_MAX_FPS)
+
+	}
+
+	//returns 0 if a particle is found
+	int FaceTarget(ColorImage *colorImage)
+	{
+		int returnVal = -1;
+		BinaryImage *binaryImage;
+		myRobot.SetSafetyEnabled(false);
+		Image *imaqImage;
+		
+		if (stickRightDrive.GetTop())
 		{
-			camera.WriteMaxFPS(CAMERA_MAX_FPS);
+			colorImage->Write("capturedImage.jpg");
 		}
-		if (camera.IsFreshImage())
+		
+		//binaryImage = colorImage->ThresholdHSV(0, 255, 0, 255, 255, 0);
+		//binaryImage = colorImage->ThresholdHSV(56, 125, 55, 255, 255, 150);
+		binaryImage = colorImage->ThresholdHSL(90, 115,30, 255, 70, 255);
+		
+		imaqImage = binaryImage->GetImaqImage();
+		if (stickRightDrive.GetTop())
 		{
-			ColorImage *colorImage = new ColorImage(IMAQ_IMAGE_HSL);
-			BinaryImage *binaryImage;
-			camera.GetImage(colorImage);
-			if (stickRightDrive.GetTrigger())
+			binaryImage->Write("afterCLRThreshold.bmp");
+			IVA_ProcessImage(imaqImage, binaryImage);
+			
+		}	
+		else
+		{
+			IVA_ProcessImage(imaqImage, (ImageBase *)0);
+		}
+		vector<ParticleAnalysisReport> *reports = binaryImage->GetOrderedParticleAnalysisReports();
+		ParticleAnalysisReport *bottomParticlePtr = NULL;
+		
+		for (int particleIndex = 0; ((particleIndex <  reports->size()) && (particleIndex < 5)); particleIndex++)
+		{
+			ParticleAnalysisReport &thisReport = reports->at(particleIndex);
+			if ((!bottomParticlePtr) || (thisReport.center_mass_y < bottomParticlePtr->center_mass_y))
 			{
-				myRobot.SetSafetyEnabled(false);
-				Image *image;
-				if (stickRightDrive.GetTop())
-				{
-					colorImage->Write("capturedImage.jpg");
-					//binaryImage = colorImage->ThresholdHSV(0, 255, 0, 255, 255, 0);
-					//binaryImage = colorImage->ThresholdHSV(56, 125, 55, 255, 255, 150);
-					binaryImage = colorImage->ThresholdHSL(66, 255,104, 255, 76, 255);
-					delete colorImage;
-					image = binaryImage->GetImaqImage();
-					binaryImage->Write("afterCLRThreshold.bmp");
-					IVA_ProcessImage(image, binaryImage);
-				}
-				else
-				{
-					//binaryImage = colorImage->ThresholdHSV(0, 255, 0, 255, 255, 0);
-					//binaryImage = colorImage->ThresholdHSV(56, 125, 55, 255, 255, 150);
-					binaryImage = colorImage->ThresholdHSL(66, 255,104, 255, 76, 255);
-					delete colorImage;
-					image = binaryImage->GetImaqImage();
-					IVA_ProcessImage(image, (ImageBase *)0);
-				}
-//				vector<ParticleAnalysisReport> *reports = binaryImage->GetOrderedParticleAnalysisReports();
-//				if (reports->size() > 0)
-				if (binaryImage->GetNumberParticles() > 0)
-				{
-					int centerOfMassX = binaryImage->GetParticleAnalysisReport(0).center_mass_x;
-					//int centerOfMassX = (*reports)[0].center_mass_x;
-					if (centerOfMassX < 150)
-					{
-						jaguarFrontLeft.Set(-.25);
-						jaguarFrontRight.Set(-.25);
-					}
-					else if (centerOfMassX > 170)
-					{
-						jaguarFrontLeft.Set(.25);
-						jaguarFrontRight.Set(.25);
-					}
-				}
-				delete binaryImage;
-				//delete reports;
+				bottomParticlePtr = &thisReport;
+			}
+		}
+		if (bottomParticlePtr != NULL)
+		{
+			returnVal = 0; //indicates success
+			int centerOfMassX = bottomParticlePtr->center_mass_x;
+			if (centerOfMassX < 130)
+			{
+				jaguarFrontLeft.Set(-FAST_TURN);
+				jaguarFrontRight.Set(-FAST_TURN);	
+			}
+			if (centerOfMassX < 150)
+			{
+				jaguarFrontLeft.Set(-SLOW_TURN);
+				jaguarFrontRight.Set(-SLOW_TURN);
+			}
+			else if (centerOfMassX > 190)
+			{
+				jaguarFrontLeft.Set(FAST_TURN);
+				jaguarFrontRight.Set(FAST_TURN);
+			}
+			else if (centerOfMassX > 170)
+			{
+				jaguarFrontLeft.Set(SLOW_TURN);
+				jaguarFrontRight.Set(SLOW_TURN);
+			}
+			else
+			{
+				jaguarFrontLeft.Set(0.0);
+				jaguarFrontRight.Set(0.0);
+			}
+		}
+		
+		delete reports;
+		delete binaryImage;
+
+		return returnVal;
+	}
+	
+	void CameraInitialize(void)
+	{
+		if (cameraInitialized == false)
+		{
+			AxisCamera &camera = AxisCamera::GetInstance("10.24.74.11");
+			if (&camera != (void *)0)
+			{
+				camera.WriteBrightness(5);
+				camera.WriteColorLevel(100);
+				camera.WriteMaxFPS(10);
 			}
 		}
 	}
-
-				
 };
-
 START_ROBOT_CLASS(Robot2012);

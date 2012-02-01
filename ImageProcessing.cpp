@@ -81,7 +81,7 @@ static int IVA_Particle(Image* image,
 int IVA_ProcessImage(Image *image, ImageBase *baseImage)
 {
 	int success = 1;
-	IVA_Data *ivaData;
+	//IVA_Data *ivaData;
 	int pParameter[2] = {17,16};
 	float plower[2] = {20,60};
 	float pUpper[2] = {40,80};
@@ -92,7 +92,7 @@ int IVA_ProcessImage(Image *image, ImageBase *baseImage)
 	int *pCalibratedMeasurements = 0;
 	//if (baseImage) baseImage->Write("capturedImage.jpg");
 	// Initializes internal data (buffers and array of points for caliper measurements)
-	VisionErrChk(ivaData = IVA_InitData(4, 0));
+	//VisionErrChk(ivaData = IVA_InitData(4, 0));
 
 	//VisionErrChk(IVA_CLRThreshold(image, 56, 125, 55, 255, 150, 255, 
 	//	IMAQ_HSV));
@@ -108,11 +108,11 @@ int IVA_ProcessImage(Image *image, ImageBase *baseImage)
 		pCalibrated, pExclude, 2, FALSE, TRUE));
 	if (baseImage) baseImage->Write("afterParticleFilter.bmp");
 
-	VisionErrChk(IVA_Particle(image, TRUE, pPixelMeasurements, 28, 
-		pCalibratedMeasurements, 0, ivaData, 3));
-	if (baseImage) baseImage->Write("finalImage.bmp");
+//	VisionErrChk(IVA_Particle(image, TRUE, pPixelMeasurements, 28, 
+//		pCalibratedMeasurements, 0, ivaData, 3));
+//	if (baseImage) baseImage->Write("finalImage.bmp");
 	// Releases the memory allocated in the IVA_Data structure.
-	IVA_DisposeData(ivaData);
+//	IVA_DisposeData(ivaData);
 
 Error:
 	return success;
