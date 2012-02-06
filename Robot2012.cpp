@@ -10,10 +10,16 @@
 #define DIGITAL_OUTPUT_CHANNEL 1	//in 2012 this should be in slot 3 (chan 1), or slot 7 (chan 2)
 #define PNEUMATIC_OUTPUT_CHANNEL 1	//in 2012 this should be in slot 2 (chan 1), or slot 6 (chan 2)
 
-#define CAMERA_MAX_FPS 5
+#define CAMERA_MAX_FPS 10
+#define CAMERA_BRIGHTNESS_LEVEL 5
+#define CAMERA_COLOR_LEVEL 100
 
-#define SLOW_TURN 0.25F
-#define FAST_TURN 0.35F
+#define SLOW_TURN 0.30F
+#define FAST_TURN 0.40F
+
+#define CENTER_OF_IMAGE 160
+
+#define DEGREES_PER_PIXEL 0.16875F
 
 #define AXIS_CAMERA_CONNECTED_TO_CRIO
 //TODO setup IPs for the camera based on this #define
@@ -40,6 +46,7 @@ class Robot2012 : public IterativeRobot
 	Joystick stickRightDrive; // only joystick
 	Joystick stickLeftDrive;
 	Joystick stickShooter;
+	Gyro gyroscope;
 
 	Timer timeInState;
 	Timer timeSinceBoot;
@@ -53,6 +60,10 @@ class Robot2012 : public IterativeRobot
 	UINT32 m_telePeriodicLoops;
 	
 	bool cameraInitialized;
+	float angleToTurn;
+	float angleAtImage;
+	bool anglesComputed;
+	
 		
 public:
 
@@ -63,6 +74,7 @@ public:
 		stickRightDrive(1),
 		stickLeftDrive(2),
 		stickShooter(3),
+		gyroscope(1),
 		timeInState(),
 		timeSinceBoot()
 	{
@@ -162,6 +174,7 @@ public:
 		m_telePeriodicLoops++;
 		if (!stickRightDrive.GetTrigger())
 		{
+			anglesComputed = false;
 			myRobot.TankDrive(stickLeftDrive,stickRightDrive);	
 			//myRobot.SetSafetyEnabled(true);
 			myRobot.SetSafetyEnabled(false);
@@ -195,7 +208,11 @@ public:
 	}
 	void TeleopContinuous(void) 
 	{
-
+		if ((stickRightDrive.GetTrigger()) && 
+			(anglesComputed == true))
+		{
+			RotateToTarget();
+		}
 	}
 
 	//returns 0 if a particle is found
@@ -241,39 +258,59 @@ public:
 		{
 			returnVal = 0; //indicates success
 			int centerOfMassX = bottomParticlePtr->center_mass_x;
-			if (centerOfMassX < 130)
-			{
-				jaguarFrontLeft.Set(-FAST_TURN);
-				jaguarFrontRight.Set(-FAST_TURN);	
-			}
-			if (centerOfMassX < 150)
-			{
-				jaguarFrontLeft.Set(-SLOW_TURN);
-				jaguarFrontRight.Set(-SLOW_TURN);
-			}
-			else if (centerOfMassX > 190)
-			{
-				jaguarFrontLeft.Set(FAST_TURN);
-				jaguarFrontRight.Set(FAST_TURN);
-			}
-			else if (centerOfMassX > 170)
-			{
-				jaguarFrontLeft.Set(SLOW_TURN);
-				jaguarFrontRight.Set(SLOW_TURN);
-			}
-			else
-			{
-				jaguarFrontLeft.Set(0.0);
-				jaguarFrontRight.Set(0.0);
-			}
+			angleToTurn = (centerOfMassX - CENTER_OF_IMAGE) * DEGREES_PER_PIXEL;
+			angleAtImage = gyroscope.GetAngle();
+			anglesComputed = true;
+		}	
+		else
+		{	
+			anglesComputed = false;
+			jaguarFrontLeft.Set(0.0);
+			jaguarFrontRight.Set(0.0);
 		}
-		
 		delete reports;
 		delete binaryImage;
 
 		return returnVal;
 	}
 	
+	void RotateToTarget(void)
+	{
+		float angle_traveled = gyroscope.GetAngle() - angleAtImage;
+		float angle_remaining = angleToTurn - angle_traveled;
+		
+		//turn left fast
+		if (angle_remaining < -13.0)
+		{
+			jaguarFrontLeft.Set(-FAST_TURN);
+			jaguarFrontRight.Set(-FAST_TURN);	
+		}
+		//turn left slowly
+		else if (angle_remaining < -3.0)
+		{
+			jaguarFrontLeft.Set(-SLOW_TURN);
+			jaguarFrontRight.Set(-SLOW_TURN);
+		}
+		//turn right fast
+		else if (angle_remaining > 13.0)
+		{
+			jaguarFrontLeft.Set(FAST_TURN);
+			jaguarFrontRight.Set(FAST_TURN);
+		}
+		//turn right slowly
+		else if (angle_remaining > 3.0)
+		{
+			jaguarFrontLeft.Set(SLOW_TURN);
+			jaguarFrontRight.Set(SLOW_TURN);
+		}
+		else
+		{
+			jaguarFrontLeft.Set(0.0);
+			jaguarFrontRight.Set(0.0);
+		}
+	}
+	
+
 	void CameraInitialize(void)
 	{
 		if (cameraInitialized == false)
@@ -281,9 +318,9 @@ public:
 			AxisCamera &camera = AxisCamera::GetInstance("10.24.74.11");
 			if (&camera != (void *)0)
 			{
-				camera.WriteBrightness(5);
-				camera.WriteColorLevel(100);
-				camera.WriteMaxFPS(10);
+				camera.WriteBrightness(CAMERA_BRIGHTNESS_LEVEL);
+				camera.WriteColorLevel(CAMERA_COLOR_LEVEL);
+				camera.WriteMaxFPS(CAMERA_MAX_FPS);
 			}
 		}
 	}
