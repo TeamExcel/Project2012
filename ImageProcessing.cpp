@@ -83,8 +83,8 @@ int IVA_ProcessImage(Image *image, ImageBase *baseImage)
 	int success = 1;
 	//IVA_Data *ivaData;
 	int pParameter[2] = {17,16};
-	float plower[2] = {20,60};
-	float pUpper[2] = {40,80};
+	float plower[2] = {25,25};
+	float pUpper[2] = {300,300};
 	int pCalibrated[2] = {0,0};
 	int pExclude[2] = {0,0};
 	int pPixelMeasurements[28] = {0,1,2,3,4,5,6,7,16,17,18,26,27,28,
