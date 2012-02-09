@@ -19,18 +19,26 @@
 
 #define CENTER_OF_IMAGE 160
 
-#define DEGREES_PER_PIXEL 0.16875F
 
-#define AXIS_CAMERA_CONNECTED_TO_CRIO
-//TODO setup IPs for the camera based on this #define
 
+#define HALF_VERTICAL_FIELD_OF_VIEW 19.13711F
+#define TANGENT_OF_HALF_VERTICAL_FIELD_OF_VIEW .347007F
+
+#define HALF_HORIZONTAL_FIELD_OF_VIEW 24.40828F
+#define TARGET_HEIGHT_IN_FEET 1.5F
+#define IMAGE_HEIGHT_IN_PIXELS 240
+
+
+#define IMAGE_HEIGHT_IN_FEET(target_height_pxls) ((TARGET_HEIGHT_IN_FEET * (IMAGE_HEIGHT_IN_PIXELS / 2)) / target_height_pxls)
+#define CALCULATE_DISTANCE(target_height_pxls) (IMAGE_HEIGHT_IN_FEET(target_height_pxls)/TANGENT_OF_HALF_VERTICAL_FIELD_OF_VIEW)
+#define HORIZONTAL_DEGREES_PER_PIXEL (HALF_HORIZONTAL_FIELD_OF_VIEW/CENTER_OF_IMAGE)
 
 typedef enum
 {
-	PWM_CHANNEL_1_JAGUAR_FRONT_LEFT = 1,
-	PWM_CHANNEL_2_JAGUAR_FRONT_RIGHT,
-	PWM_CHANNEL_3_JAGUAR_REAR_LEFT,
-	PWM_CHANNEL_4_JAGUAR_REAR_RIGHT,
+	PWM_CHANNEL_1_JAGUAR_REAR_RIGHT = 1,
+	PWM_CHANNEL_2_JAGUAR_REAR_LEFT,
+	PWM_CHANNEL_3_JAGUAR_FRONT_RIGHT,
+	PWM_CHANNEL_4_JAGUAR_FRONT_LEFT,
 	PWM_CHANNEL_5_UNUSED,
 	PWM_CHANNEL_6_UNUSED,
 	PWM_CHANNEL_7_UNUSED,
@@ -42,6 +50,8 @@ class Robot2012 : public IterativeRobot
 {
 	Jaguar jaguarFrontLeft;
 	Jaguar jaguarFrontRight;
+	Jaguar jaguarRearLeft;
+	Jaguar jaguarRearRight;
 	RobotDrive myRobot; // robot drive system
 	Joystick stickRightDrive; // only joystick
 	Joystick stickLeftDrive;
@@ -63,14 +73,17 @@ class Robot2012 : public IterativeRobot
 	float angleToTurn;
 	float angleAtImage;
 	bool anglesComputed;
-	
+	int testCount;
+	float distanceToTarget;
 		
 public:
 
 	Robot2012(void):
-		jaguarFrontLeft(DIGITAL_OUTPUT_CHANNEL,PWM_CHANNEL_1_JAGUAR_FRONT_LEFT),
-		jaguarFrontRight(DIGITAL_OUTPUT_CHANNEL,PWM_CHANNEL_2_JAGUAR_FRONT_RIGHT),
-		myRobot(&jaguarFrontLeft,&jaguarFrontRight),
+		jaguarFrontLeft(DIGITAL_OUTPUT_CHANNEL,PWM_CHANNEL_4_JAGUAR_FRONT_LEFT),
+		jaguarFrontRight(DIGITAL_OUTPUT_CHANNEL,PWM_CHANNEL_3_JAGUAR_FRONT_RIGHT),
+		jaguarRearLeft(DIGITAL_OUTPUT_CHANNEL,PWM_CHANNEL_2_JAGUAR_REAR_LEFT),
+		jaguarRearRight(DIGITAL_OUTPUT_CHANNEL,PWM_CHANNEL_1_JAGUAR_REAR_RIGHT),
+		myRobot(&jaguarFrontLeft, &jaguarRearLeft, &jaguarFrontRight, &jaguarRearRight),
 		stickRightDrive(1),
 		stickLeftDrive(2),
 		stickShooter(3),
@@ -82,7 +95,10 @@ public:
 		cameraInitialized = false;
 		// Acquire the Driver Station object
 		driverStation = DriverStation::GetInstance();
-
+		myRobot.SetInvertedMotor(myRobot.kRearLeftMotor, true);
+		myRobot.SetInvertedMotor(myRobot.kRearRightMotor, true);
+		myRobot.SetInvertedMotor(myRobot.kFrontLeftMotor, false);
+		myRobot.SetInvertedMotor(myRobot.kFrontRightMotor, false);
 		// Iterate over all the buttons on each joystick, setting state to false for each
 //		UINT8 buttonNum = 1;						// start counting buttons at button 1
 //		for (buttonNum = 1; buttonNum <= NUM_JOYSTICK_BUTTONS; buttonNum++) {
@@ -178,6 +194,7 @@ public:
 			myRobot.TankDrive(stickLeftDrive,stickRightDrive);	
 			//myRobot.SetSafetyEnabled(true);
 			myRobot.SetSafetyEnabled(false);
+			testCount = 0;
 		}
 		CameraInitialize();
 		AxisCamera &camera = AxisCamera::GetInstance("10.24.74.11");
@@ -188,7 +205,7 @@ public:
 			camera.GetImage(colorImage);
 			if (stickRightDrive.GetTrigger())
 			{
-				FaceTarget(colorImage);
+				DetermineTargetPosition(colorImage);
 			}
 			delete colorImage;
 		}
@@ -216,7 +233,7 @@ public:
 	}
 
 	//returns 0 if a particle is found
-	int FaceTarget(ColorImage *colorImage)
+	int DetermineTargetPosition(ColorImage *colorImage)
 	{
 		int returnVal = -1;
 		BinaryImage *binaryImage;
@@ -258,15 +275,20 @@ public:
 		{
 			returnVal = 0; //indicates success
 			int centerOfMassX = bottomParticlePtr->center_mass_x;
-			angleToTurn = (centerOfMassX - CENTER_OF_IMAGE) * DEGREES_PER_PIXEL;
+			
+			angleToTurn = (centerOfMassX - CENTER_OF_IMAGE) * HORIZONTAL_DEGREES_PER_PIXEL;
 			angleAtImage = gyroscope.GetAngle();
+			
+			distanceToTarget = CALCULATE_DISTANCE(bottomParticlePtr->boundingRect.height);
+			
+			
 			anglesComputed = true;
 		}	
 		else
 		{	
-			anglesComputed = false;
 			jaguarFrontLeft.Set(0.0);
 			jaguarFrontRight.Set(0.0);
+			anglesComputed = false;
 		}
 		delete reports;
 		delete binaryImage;
@@ -278,30 +300,30 @@ public:
 	{
 		float angle_traveled = gyroscope.GetAngle() - angleAtImage;
 		float angle_remaining = angleToTurn - angle_traveled;
-		
+		float angle_percent_remaining = angle_remaining / angleToTurn;
 		//turn left fast
 		if (angle_remaining < -13.0)
 		{
-			jaguarFrontLeft.Set(-FAST_TURN);
-			jaguarFrontRight.Set(-FAST_TURN);	
+			jaguarFrontLeft.Set(-(FAST_TURN * angle_percent_remaining));
+			jaguarFrontRight.Set(-(FAST_TURN * angle_percent_remaining));	
 		}
 		//turn left slowly
 		else if (angle_remaining < -3.0)
 		{
-			jaguarFrontLeft.Set(-SLOW_TURN);
-			jaguarFrontRight.Set(-SLOW_TURN);
+			jaguarFrontLeft.Set(-(SLOW_TURN * angle_percent_remaining));
+			jaguarFrontRight.Set(-(SLOW_TURN * angle_percent_remaining));
 		}
 		//turn right fast
 		else if (angle_remaining > 13.0)
 		{
-			jaguarFrontLeft.Set(FAST_TURN);
-			jaguarFrontRight.Set(FAST_TURN);
+			jaguarFrontLeft.Set((FAST_TURN * angle_percent_remaining));
+			jaguarFrontRight.Set((FAST_TURN * angle_percent_remaining));
 		}
 		//turn right slowly
 		else if (angle_remaining > 3.0)
 		{
-			jaguarFrontLeft.Set(SLOW_TURN);
-			jaguarFrontRight.Set(SLOW_TURN);
+			jaguarFrontLeft.Set((SLOW_TURN * angle_percent_remaining));
+			jaguarFrontRight.Set((SLOW_TURN * angle_percent_remaining));
 		}
 		else
 		{
