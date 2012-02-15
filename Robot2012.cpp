@@ -7,13 +7,14 @@
 // Defines and typedefs
 ////////////////////////////////////////////////////////
 #define ANALOG_OUTPUT_CHANNEL 1		//in 2012 this should be in slot 1 (chan 1), or slot 5 (chan 2)
-#define DIGITAL_OUTPUT_CHANNEL 1	//in 2012 this should be in slot 3 (chan 1), or slot 7 (chan 2)
-#define PNEUMATIC_OUTPUT_CHANNEL 1	//in 2012 this should be in slot 2 (chan 1), or slot 6 (chan 2)
+#define DIGITAL_OUTPUT_CHANNEL 1	//in 2012 this should be in slot 2 (chan 1), or slot 7 (chan 2)
+#define SOLENOID_OUTPUT_CHANNEL 1	//in 2012 this should be in slot 3 (chan 1), or slot 6 (chan 2)
 
 #define CAMERA_MAX_FPS 10
 #define CAMERA_BRIGHTNESS_LEVEL 5
 #define CAMERA_COLOR_LEVEL 100
 
+#define VERY_SLOW_TURN 0.20F
 #define SLOW_TURN 0.30F
 #define FAST_TURN 0.40F
 
@@ -33,18 +34,97 @@
 #define CALCULATE_DISTANCE(target_height_pxls) (IMAGE_HEIGHT_IN_FEET(target_height_pxls)/TANGENT_OF_HALF_VERTICAL_FIELD_OF_VIEW)
 #define HORIZONTAL_DEGREES_PER_PIXEL (HALF_HORIZONTAL_FIELD_OF_VIEW/CENTER_OF_IMAGE)
 
+
+//Controls defines - for new buttons, add a #define here and use it to get the key you want, that way we can change controls easily
+#define BUTTON_CAMERA_ALIGN_SHOT_BUTTON() stickRightDrive.GetTrigger()
+#define BUTTON_CAMERA_TAKE_DEBUG_PICTURES() 0
+
+#define BUTTON_ELEVATOR_BOTTOM_UP() (stickShooter.GetRawButton(2) || stickRightDrive.GetTop())
+#define BUTTON_ELEVATOR_BOTTOM_DOWN() stickShooter.GetRawButton(3)
+#define BUTTON_ELEVATOR_TOP_UP() stickShooter.GetRawButton(4)
+#define BUTTON_ELEVATOR_TOP_DOWN() stickShooter.GetRawButton(5)
+
+#define BUTTON_CATAPULT_SHOOT() stickShooter.GetTrigger()
+#define BUTTON_CATAPULT_LATCH() stickShooter.GetTrigger()
+#define BUTTON_CATAPULT_FORCE_SHOOT() stickShooter.GetRawButton(10)
+#define THROTTLE_ELEVATORS() (((-stickShooter.GetThrottle()) + 1) / 2)
+
+#define BUTTON_DUMPER_RAMP_EXTEND() stickShooter.GetRawButton(9)
+#define BUTTON_DUMPER_ROLLER() stickShooter.GetRawButton(11)
+
+#define BUTTON_LOWER_BRIDGE_RAM() stickLeftDrive.GetTop()
+
+
+//Helper Macros
+#define DUMPER_RAMP_EXTENDED(isExtended) {FlipSolenoids(isExtended, &solenoidDumperRampUp, &solenoidDumperRampDown);}
+#define BRIDGE_RAM_EXTENDED(isExtended) {FlipSolenoids(isExtended, &solenoidBridgeRamDown, &solenoidBridgeRamUp);}
+#define CATAPULT_PUSHER_EXTENDED(isExtended) {FlipSolenoids(isExtended, &solenoidCatapultPusher, &solenoidCatapultPuller);}
+#define CATAPULT_LATCH_EXTENDED(isExtended) {FlipSolenoids(isExtended, &solenoidCatapultLatchExtend, &solenoidCatapultLatchRetract);}
+
 typedef enum
 {
 	PWM_CHANNEL_1_JAGUAR_REAR_RIGHT = 1,
 	PWM_CHANNEL_2_JAGUAR_REAR_LEFT,
 	PWM_CHANNEL_3_JAGUAR_FRONT_RIGHT,
 	PWM_CHANNEL_4_JAGUAR_FRONT_LEFT,
-	PWM_CHANNEL_5_UNUSED,
-	PWM_CHANNEL_6_UNUSED,
-	PWM_CHANNEL_7_UNUSED,
-	PWM_CHANNEL_8_UNUSED,
-	PWM_CHANNEL_9_UNUSED,
+	PWM_CHANNEL_5_JAGUAR_ELEVATOR_BOTTOM_1,
+	PWM_CHANNEL_6_JAGUAR_ELEVATOR_BOTTOM_2,
+	PWM_CHANNEL_7_JAGUAR_ELEVATOR_TOP,
+	PWM_CHANNEL_8_JAGUAR_DUMPER_ROLLER,
+	PWM_CHANNEL_9_UNUSED
 }PWM_CHANNEL_TYPE;
+
+#define BOTTOM_ROLLERS_SYNC_GROUP 1
+
+typedef enum
+{
+	SOLENOID_CHANNEL_1_CATAPULT_PUSHER = 1,
+	SOLENOID_CHANNEL_2_CATAPULT_PULLER,
+	SOLENOID_CHANNEL_3_BRIDGE_RAM_DOWN,
+	SOLENOID_CHANNEL_4_BRIDGE_RAM_UP,
+	SOLENOID_CHANNEL_5_DUMPER_RAMP_UP,
+	SOLENOID_CHANNEL_6_DUMPER_RAMP_DOWN,
+	SOLENOID_CHANNEL_7_CATAPULT_LATCH_EXTEND,
+	SOLENOID_CHANNEL_8_CATAPULT_LATCH_RETRACT,
+	SOLENOID_CHANNEL_9_UNUSED
+}SOLENOID_CHANNEL_TYPE;
+
+typedef enum
+{
+	ANALOG_CHANNEL_1_GYROSCOPE = 1,
+	ANALOG_CHANNEL_2_UNUSED,
+	ANALOG_CHANNEL_3_UNUSED,
+	ANALOG_CHANNEL_4_UNUSED,
+	ANALOG_CHANNEL_5_UNUSED,
+	ANALOG_CHANNEL_6_UNUSED,
+	ANALOG_CHANNEL_7_UNUSED,
+	ANALOG_CHANNEL_8_UNUSED,
+	ANALOG_CHANNEL_9_UNUSED
+}ANALOG_CHANNEL_TYPE;
+
+typedef enum
+{
+	DIGITAL_CHANNEL_1_INPUT_COMPRESSOR_SWITCH = 1,
+	DIGITAL_CHANNEL_2_UNUSED,
+	DIGITAL_CHANNEL_3_UNUSED,
+	DIGITAL_CHANNEL_4_UNUSED,
+	DIGITAL_CHANNEL_5_UNUSED,
+	DIGITAL_CHANNEL_6_UNUSED,
+	DIGITAL_CHANNEL_7_UNUSED,
+	DIGITAL_CHANNEL_8_UNUSED
+}DIGITAL_IO_CHANNEL_TYPE;
+
+typedef enum 
+{
+	RELAY_CHANNEL_1_COMPRESSOR_RELAY = 1,
+	RELAY_CHANNEL_2_UNUSED,
+	RELAY_CHANNEL_3_UNUSED,
+	RELAY_CHANNEL_4_UNUSED,
+	RELAY_CHANNEL_5_UNUSED,
+	RELAY_CHANNEL_6_UNUSED,
+	RELAY_CHANNEL_7_UNUSED,
+	RELAY_CHANNEL_8_UNUSED,
+}RELAY_CHANNEL_TYPE;
 
 class Robot2012 : public IterativeRobot
 {
@@ -53,15 +133,29 @@ class Robot2012 : public IterativeRobot
 	Jaguar jaguarRearLeft;
 	Jaguar jaguarRearRight;
 	RobotDrive myRobot; // robot drive system
+	Jaguar jaguarElevatorBottom1;
+	Jaguar jaguarElevatorBottom2;
+	Jaguar jaguarElevatorTop;
+	Jaguar jaguarDumperRoller;
+	Solenoid solenoidCatapultPusher;
+	Solenoid solenoidCatapultPuller;
+	Solenoid solenoidBridgeRamDown;
+	Solenoid solenoidBridgeRamUp;
+	Solenoid solenoidDumperRampUp;
+	Solenoid solenoidDumperRampDown;
+	Solenoid solenoidCatapultLatchExtend;
+	Solenoid solenoidCatapultLatchRetract;
 	Joystick stickRightDrive; // only joystick
 	Joystick stickLeftDrive;
 	Joystick stickShooter;
 	Gyro gyroscope;
+	Compressor compressor;
 
 	Timer timeInState;
 	Timer timeSinceBoot;
 	
 	DriverStation *driverStation;
+	DriverStationLCD *driverStationLCD;
 		
 		// Local variables to count the number of periodic loops performed
 	
@@ -79,15 +173,28 @@ class Robot2012 : public IterativeRobot
 public:
 
 	Robot2012(void):
-		jaguarFrontLeft(DIGITAL_OUTPUT_CHANNEL,PWM_CHANNEL_4_JAGUAR_FRONT_LEFT),
-		jaguarFrontRight(DIGITAL_OUTPUT_CHANNEL,PWM_CHANNEL_3_JAGUAR_FRONT_RIGHT),
-		jaguarRearLeft(DIGITAL_OUTPUT_CHANNEL,PWM_CHANNEL_2_JAGUAR_REAR_LEFT),
-		jaguarRearRight(DIGITAL_OUTPUT_CHANNEL,PWM_CHANNEL_1_JAGUAR_REAR_RIGHT),
+		jaguarFrontLeft(DIGITAL_OUTPUT_CHANNEL, PWM_CHANNEL_4_JAGUAR_FRONT_LEFT),
+		jaguarFrontRight(DIGITAL_OUTPUT_CHANNEL, PWM_CHANNEL_3_JAGUAR_FRONT_RIGHT),
+		jaguarRearLeft(DIGITAL_OUTPUT_CHANNEL, PWM_CHANNEL_2_JAGUAR_REAR_LEFT),
+		jaguarRearRight(DIGITAL_OUTPUT_CHANNEL, PWM_CHANNEL_1_JAGUAR_REAR_RIGHT),
 		myRobot(&jaguarFrontLeft, &jaguarRearLeft, &jaguarFrontRight, &jaguarRearRight),
+		jaguarElevatorBottom1(DIGITAL_OUTPUT_CHANNEL, PWM_CHANNEL_5_JAGUAR_ELEVATOR_BOTTOM_1),
+		jaguarElevatorBottom2(DIGITAL_OUTPUT_CHANNEL, PWM_CHANNEL_6_JAGUAR_ELEVATOR_BOTTOM_2),
+		jaguarElevatorTop(DIGITAL_OUTPUT_CHANNEL, PWM_CHANNEL_7_JAGUAR_ELEVATOR_TOP),
+		jaguarDumperRoller(DIGITAL_OUTPUT_CHANNEL, PWM_CHANNEL_8_JAGUAR_DUMPER_ROLLER),
+		solenoidCatapultPusher(SOLENOID_OUTPUT_CHANNEL, SOLENOID_CHANNEL_1_CATAPULT_PUSHER),
+		solenoidCatapultPuller(SOLENOID_OUTPUT_CHANNEL, SOLENOID_CHANNEL_2_CATAPULT_PULLER),
+		solenoidBridgeRamDown(SOLENOID_OUTPUT_CHANNEL, SOLENOID_CHANNEL_3_BRIDGE_RAM_DOWN),
+		solenoidBridgeRamUp(SOLENOID_OUTPUT_CHANNEL, SOLENOID_CHANNEL_4_BRIDGE_RAM_UP),
+		solenoidDumperRampUp(SOLENOID_OUTPUT_CHANNEL, SOLENOID_CHANNEL_5_DUMPER_RAMP_UP),
+		solenoidDumperRampDown(SOLENOID_OUTPUT_CHANNEL, SOLENOID_CHANNEL_6_DUMPER_RAMP_DOWN),
+		solenoidCatapultLatchExtend(SOLENOID_OUTPUT_CHANNEL, SOLENOID_CHANNEL_7_CATAPULT_LATCH_EXTEND),
+		solenoidCatapultLatchRetract(SOLENOID_OUTPUT_CHANNEL, SOLENOID_CHANNEL_8_CATAPULT_LATCH_RETRACT),
 		stickRightDrive(1),
 		stickLeftDrive(2),
 		stickShooter(3),
-		gyroscope(1),
+		gyroscope(ANALOG_OUTPUT_CHANNEL, ANALOG_CHANNEL_1_GYROSCOPE),
+		compressor(DIGITAL_CHANNEL_1_INPUT_COMPRESSOR_SWITCH, RELAY_CHANNEL_1_COMPRESSOR_RELAY),
 		timeInState(),
 		timeSinceBoot()
 	{
@@ -95,16 +202,11 @@ public:
 		cameraInitialized = false;
 		// Acquire the Driver Station object
 		driverStation = DriverStation::GetInstance();
+		driverStationLCD = DriverStationLCD::GetInstance();
 		myRobot.SetInvertedMotor(myRobot.kRearLeftMotor, true);
 		myRobot.SetInvertedMotor(myRobot.kRearRightMotor, true);
-		myRobot.SetInvertedMotor(myRobot.kFrontLeftMotor, false);
-		myRobot.SetInvertedMotor(myRobot.kFrontRightMotor, false);
-		// Iterate over all the buttons on each joystick, setting state to false for each
-//		UINT8 buttonNum = 1;						// start counting buttons at button 1
-//		for (buttonNum = 1; buttonNum <= NUM_JOYSTICK_BUTTONS; buttonNum++) {
-//			m_rightStickButtonState[buttonNum] = false;
-//			m_leftStickButtonState[buttonNum] = false;
-//		}
+		myRobot.SetInvertedMotor(myRobot.kFrontLeftMotor, true);
+		myRobot.SetInvertedMotor(myRobot.kFrontRightMotor, true);
 
 		// Initialize counters to record the number of loops completed in autonomous and teleop modes
 		m_autoPeriodicLoops = 0;
@@ -133,15 +235,16 @@ public:
 		timeInState.Reset();
 		timeInState.Start();
 		m_disabledPeriodicLoops = 0;			// Reset the loop counter for disabled mode
+		compressor.Stop();
 	}
 
 	void AutonomousInit(void) 
 	{
 		timeInState.Reset();
 		timeInState.Start();
+		compressor.Start();
 		m_autoPeriodicLoops = 0;				// Reset the loop counter for autonomous mode
-		myRobot.SetInvertedMotor(myRobot.kFrontLeftMotor, true);
-		myRobot.SetInvertedMotor(myRobot.kFrontRightMotor, true);
+		anglesComputed = false;
 	}
 
 	void TeleopInit(void) 
@@ -149,15 +252,14 @@ public:
 		m_telePeriodicLoops = 0;				// Reset the loop counter for teleop mode
 		timeInState.Reset();
 		timeInState.Start();
-		myRobot.SetInvertedMotor(myRobot.kFrontLeftMotor, true);
-		myRobot.SetInvertedMotor(myRobot.kFrontRightMotor, true);
+		compressor.Start();
+		anglesComputed = false;
 	}
 
 	/********************************** Periodic Routines *************************************/
 	
 	void DisabledPeriodic(void)  
 	{
-		// increment the number of disabled periodic loops completed
 		m_disabledPeriodicLoops++;
 	}
 
@@ -165,22 +267,6 @@ public:
 	{
 		m_autoPeriodicLoops++;
 
-				
-		/* the below code (if uncommented) would drive the robot forward at half speed
-		 * for two seconds.  This code is provided as an example of how to drive the 
-		 * robot in autonomous mode, but is not enabled in the default code in order
-		 * to prevent an unsuspecting team from having their robot drive autonomously!
-		 */
-		/* below code commented out for safety
-		if (m_autoPeriodicLoops == 1) {
-			// When on the first periodic loop in autonomous mode, start driving forwards at half speed
-			m_robotDrive->Drive(0.5, 0.0);			// drive forwards at half speed
-		}
-		if (m_autoPeriodicLoops == (2 * GetLoopsPerSec())) {
-			// After 2 seconds, stop the robot 
-			m_robotDrive->Drive(0.0, 0.0);			// stop robot
-		}
-		*/
 	}
 
 	
@@ -188,7 +274,8 @@ public:
 	{
 		// increment the number of teleop periodic loops completed
 		m_telePeriodicLoops++;
-		if (!stickRightDrive.GetTrigger())
+		
+		if (!BUTTON_CAMERA_ALIGN_SHOT_BUTTON())
 		{
 			anglesComputed = false;
 			myRobot.TankDrive(stickLeftDrive,stickRightDrive);	
@@ -199,11 +286,16 @@ public:
 		CameraInitialize();
 		AxisCamera &camera = AxisCamera::GetInstance("10.24.74.11");
 
+		
+		ManageAppendages();
+		ManageElevator();
+		ManageCatapult();
+		
 		if (camera.IsFreshImage())
 		{
 			ColorImage *colorImage = new ColorImage(IMAQ_IMAGE_HSL);
 			camera.GetImage(colorImage);
-			if (stickRightDrive.GetTrigger())
+			if (BUTTON_CAMERA_ALIGN_SHOT_BUTTON() && (anglesComputed == false))
 			{
 				DetermineTargetPosition(colorImage);
 			}
@@ -225,7 +317,7 @@ public:
 	}
 	void TeleopContinuous(void) 
 	{
-		if ((stickRightDrive.GetTrigger()) && 
+		if ((BUTTON_CAMERA_ALIGN_SHOT_BUTTON()) && 
 			(anglesComputed == true))
 		{
 			RotateToTarget();
@@ -240,7 +332,7 @@ public:
 		myRobot.SetSafetyEnabled(false);
 		Image *imaqImage;
 		
-		if (stickRightDrive.GetTop())
+		if (BUTTON_CAMERA_TAKE_DEBUG_PICTURES())
 		{
 			colorImage->Write("capturedImage.jpg");
 		}
@@ -250,7 +342,7 @@ public:
 		binaryImage = colorImage->ThresholdHSL(90, 115,30, 255, 70, 255);
 		
 		imaqImage = binaryImage->GetImaqImage();
-		if (stickRightDrive.GetTop())
+		if (BUTTON_CAMERA_TAKE_DEBUG_PICTURES())
 		{
 			binaryImage->Write("afterCLRThreshold.bmp");
 			IVA_ProcessImage(imaqImage, binaryImage);
@@ -266,7 +358,7 @@ public:
 		for (int particleIndex = 0; ((particleIndex <  reports->size()) && (particleIndex < 5)); particleIndex++)
 		{
 			ParticleAnalysisReport &thisReport = reports->at(particleIndex);
-			if ((!bottomParticlePtr) || (thisReport.center_mass_y < bottomParticlePtr->center_mass_y))
+			if ((!bottomParticlePtr) || (thisReport.center_mass_y  > bottomParticlePtr->center_mass_y))
 			{
 				bottomParticlePtr = &thisReport;
 			}
@@ -280,8 +372,10 @@ public:
 			angleAtImage = gyroscope.GetAngle();
 			
 			distanceToTarget = CALCULATE_DISTANCE(bottomParticlePtr->boundingRect.height);
-			
-			
+
+			driverStationLCD->PrintfLine((DriverStationLCD::Line) 0, "Angle to turn: %.5f", angleToTurn);
+			driverStationLCD->PrintfLine((DriverStationLCD::Line) 1, "Distance: %.5f", distanceToTarget);
+			driverStationLCD->UpdateLCD();
 			anglesComputed = true;
 		}	
 		else
@@ -313,6 +407,11 @@ public:
 			jaguarFrontLeft.Set(-(SLOW_TURN * angle_percent_remaining));
 			jaguarFrontRight.Set(-(SLOW_TURN * angle_percent_remaining));
 		}
+		else if (angle_remaining < -0.5)
+		{
+			jaguarFrontLeft.Set(-(VERY_SLOW_TURN * angle_percent_remaining));
+			jaguarFrontRight.Set(-(VERY_SLOW_TURN * angle_percent_remaining));
+		}
 		//turn right fast
 		else if (angle_remaining > 13.0)
 		{
@@ -325,6 +424,11 @@ public:
 			jaguarFrontLeft.Set((SLOW_TURN * angle_percent_remaining));
 			jaguarFrontRight.Set((SLOW_TURN * angle_percent_remaining));
 		}
+		else if (angle_remaining > 0.5)
+		{
+			jaguarFrontLeft.Set((VERY_SLOW_TURN * angle_percent_remaining));
+			jaguarFrontRight.Set((VERY_SLOW_TURN * angle_percent_remaining));
+		}
 		else
 		{
 			jaguarFrontLeft.Set(0.0);
@@ -332,7 +436,235 @@ public:
 		}
 	}
 	
+	void ManageAppendages(void)
+	{
+		typedef enum
+		{
+			APPENDAGE_IDLE,
+			APPENDAGE_BRIDGE_RAM_EXTENDED,
+			APPENDAGE_BRIDGE_RAM_RETRACTING,
+			APPENDAGE_DUMPER_RAMP_EXTENDED,
+			APPENDAGE_DUMPER_RAMP_RETRACTING
+		}APPENDAGE_STATE;
+		
+		static int retracting_appendage_counter = 0;
+		static APPENDAGE_STATE appendage_state = APPENDAGE_IDLE;
+		static bool trigger_released = false;
+		switch(appendage_state)
+		{
+		default:
+		case APPENDAGE_IDLE:
+			BRIDGE_RAM_EXTENDED(false);
+			DUMPER_RAMP_EXTENDED(false);
+			if (!BUTTON_LOWER_BRIDGE_RAM() && !BUTTON_DUMPER_RAMP_EXTEND())
+			{
+				trigger_released = true;
+			}
+			
+			if(trigger_released && BUTTON_LOWER_BRIDGE_RAM())
+			{
+				trigger_released = false;
+				BRIDGE_RAM_EXTENDED(true);
+				appendage_state = APPENDAGE_BRIDGE_RAM_EXTENDED;
+			}
+			else if (trigger_released && BUTTON_DUMPER_RAMP_EXTEND())
+			{
+				trigger_released = false;
+				DUMPER_RAMP_EXTENDED(true);
+				appendage_state = APPENDAGE_DUMPER_RAMP_EXTENDED;
+			}
+			break;
+		case APPENDAGE_BRIDGE_RAM_EXTENDED:
+			BRIDGE_RAM_EXTENDED(true);
+			DUMPER_RAMP_EXTENDED(false);
 
+			if (!BUTTON_LOWER_BRIDGE_RAM())
+			{
+				trigger_released = true;
+			}
+			if (trigger_released && BUTTON_LOWER_BRIDGE_RAM())
+			{
+				trigger_released = false;
+				BRIDGE_RAM_EXTENDED(false);
+				DUMPER_RAMP_EXTENDED(false);
+				retracting_appendage_counter = 0;
+				appendage_state = APPENDAGE_DUMPER_RAMP_RETRACTING;
+			}
+			break;
+		case APPENDAGE_BRIDGE_RAM_RETRACTING:
+			BRIDGE_RAM_EXTENDED(false);
+			DUMPER_RAMP_EXTENDED(false);
+			if (!BUTTON_LOWER_BRIDGE_RAM())
+			{
+				trigger_released = true;
+			}
+			
+			retracting_appendage_counter++;
+			if (retracting_appendage_counter > 10)
+			{
+				appendage_state = APPENDAGE_IDLE;
+			}
+			break;
+		case APPENDAGE_DUMPER_RAMP_EXTENDED:
+
+			BRIDGE_RAM_EXTENDED(false);
+			DUMPER_RAMP_EXTENDED(true);
+
+			if (!BUTTON_DUMPER_RAMP_EXTEND())
+			{
+				trigger_released = true;
+			}
+			if (trigger_released && BUTTON_DUMPER_RAMP_EXTEND())
+			{
+				trigger_released = false;
+				BRIDGE_RAM_EXTENDED(false);
+				DUMPER_RAMP_EXTENDED(false);
+				retracting_appendage_counter = 0;
+				appendage_state = APPENDAGE_DUMPER_RAMP_RETRACTING;
+			}
+			break;
+		case APPENDAGE_DUMPER_RAMP_RETRACTING:
+			BRIDGE_RAM_EXTENDED(false);
+			DUMPER_RAMP_EXTENDED(false);
+			if (!BUTTON_DUMPER_RAMP_EXTEND())
+			{
+				trigger_released = true;
+			}
+			retracting_appendage_counter++;
+			if (retracting_appendage_counter > 10)
+			{
+				appendage_state = APPENDAGE_IDLE;
+			}
+			break;
+		}
+	}
+
+	void ManageElevator(void)
+	{
+		float throttle = THROTTLE_ELEVATORS();
+		static float prev_throttle;
+		if (throttle != prev_throttle)
+		{
+			driverStationLCD->PrintfLine((DriverStationLCD::Line) 2, "Throttle: %f", throttle);
+			driverStationLCD->UpdateLCD();
+			prev_throttle = throttle;
+		}
+		
+		if (BUTTON_ELEVATOR_BOTTOM_UP())
+		{
+			jaguarElevatorBottom1.Set(-throttle, BOTTOM_ROLLERS_SYNC_GROUP);
+			jaguarElevatorBottom2.Set(-throttle, BOTTOM_ROLLERS_SYNC_GROUP);
+		}
+		else if (BUTTON_ELEVATOR_BOTTOM_DOWN())
+		{
+			jaguarElevatorBottom1.Set(throttle, BOTTOM_ROLLERS_SYNC_GROUP);
+			jaguarElevatorBottom2.Set(throttle, BOTTOM_ROLLERS_SYNC_GROUP);
+		}
+		else
+		{
+			jaguarElevatorBottom1.Set(0.0);
+			jaguarElevatorBottom2.Set(0.0);
+		}
+		
+		if (BUTTON_ELEVATOR_TOP_UP())
+		{
+			jaguarElevatorTop.Set(throttle);
+		}
+		else if (BUTTON_ELEVATOR_TOP_DOWN())
+		{
+			jaguarElevatorTop.Set(-throttle);
+		}
+		else
+		{
+			jaguarElevatorTop.Set(0.0);
+		}
+		
+		if (BUTTON_DUMPER_ROLLER())
+		{
+			jaguarDumperRoller.Set(0.5F);
+		}
+		else
+		{
+			jaguarDumperRoller.Set(0.0);
+		}
+	}
+	
+	void ManageCatapult(void)
+	{
+		typedef enum
+		{
+			CATAPULT_INITIAL,
+			CATAPULT_COCKING,
+			CATAPULT_WAITING_LATCH,
+			CATAPULT_READY,
+			CATAPULT_FIRING
+		}CATAPULT_STATE;
+		
+		static CATAPULT_STATE catapult_state = CATAPULT_INITIAL;
+		static Timer state_timer;
+		state_timer.Start();
+		switch (catapult_state)
+		{
+		case CATAPULT_INITIAL:
+			CATAPULT_LATCH_EXTENDED(false);
+			CATAPULT_PUSHER_EXTENDED(false);
+			if (BUTTON_CATAPULT_SHOOT())
+			{
+				CATAPULT_PUSHER_EXTENDED(true);
+				catapult_state = CATAPULT_COCKING;
+				state_timer.Reset();
+			}
+			break;
+		case CATAPULT_COCKING:
+			CATAPULT_PUSHER_EXTENDED(true);
+			CATAPULT_LATCH_EXTENDED(false);
+			if (state_timer.Get() >= 2.0);
+			{
+				state_timer.Reset();
+				catapult_state = CATAPULT_WAITING_LATCH;
+			}
+			break;
+		case CATAPULT_WAITING_LATCH:
+			CATAPULT_LATCH_EXTENDED(false);
+			CATAPULT_PUSHER_EXTENDED(true);
+			if (BUTTON_CATAPULT_LATCH())
+			{
+				CATAPULT_LATCH_EXTENDED(true);
+				//maybe switch solonoid?
+				state_timer.Reset();
+				catapult_state = CATAPULT_READY;
+			}
+			break;
+		case CATAPULT_READY:
+			CATAPULT_PUSHER_EXTENDED(false);
+			CATAPULT_LATCH_EXTENDED(true);
+			if (BUTTON_CATAPULT_SHOOT() && (state_timer.Get() > 0.1))
+			{
+				if ((BUTTON_CATAPULT_FORCE_SHOOT() == true) ||
+					((anglesComputed == true) && 
+					 (angleToTurn < 1.0) && 
+					 (angleToTurn > -1.0))) 
+				{
+					CATAPULT_LATCH_EXTENDED(false);
+					state_timer.Reset();
+					catapult_state = CATAPULT_FIRING;
+				}
+			}
+			break;
+		case CATAPULT_FIRING:
+			CATAPULT_PUSHER_EXTENDED(false);
+			CATAPULT_LATCH_EXTENDED(false);
+			if (state_timer.Get() >= 1.0)
+			{
+				CATAPULT_PUSHER_EXTENDED(true);
+				catapult_state = CATAPULT_COCKING;
+			}
+			break;
+		}
+		driverStationLCD->PrintfLine((DriverStationLCD::Line) 3, "Catapult State: %d\tDuration: %f", catapult_state, state_timer.Get());
+		driverStationLCD->UpdateLCD();
+	}
+	
 	void CameraInitialize(void)
 	{
 		if (cameraInitialized == false)
@@ -346,5 +678,24 @@ public:
 			}
 		}
 	}
+	
+	void FlipSolenoids(bool isFirstEna, Solenoid *sol1, Solenoid *sol2)
+	{
+		if ((sol1 == NULL) || (sol2 == NULL))
+			return;
+		
+		if (isFirstEna)
+		{
+			sol2->Set(false);
+			sol1->Set(true);
+		}
+		else
+		{
+			sol1->Set(false);
+			sol2->Set(true);
+		}
+	}
 };
+
+
 START_ROBOT_CLASS(Robot2012);
