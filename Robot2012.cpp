@@ -3,6 +3,8 @@
 #include "Vision/AxisCamera.h"
 #include "nivision.h"
 #include "ImageProcessing.h"
+#include "customPIDs.h"
+#include "AnalogRangeFinder.h"
 ////////////////////////////////////////////////////////
 // Defines and typedefs
 ////////////////////////////////////////////////////////
@@ -17,6 +19,12 @@
 #define VERY_SLOW_TURN 0.20F
 #define SLOW_TURN 0.30F
 #define FAST_TURN 0.40F
+
+#define ELEVATOR_SPEED_BOTTOM 0.6F
+#define ELEVATOR_SPEED_TOP 1.0F
+
+
+
 
 #define CENTER_OF_IMAGE 160
 
@@ -55,6 +63,34 @@
 #define BUTTON_LOWER_BRIDGE_RAM() stickLeftDrive.GetTop()
 
 
+//PID Parameters
+#define ROTATION_PID_PROPORTION 2.0
+#define ROTATION_PID_INTEGRAL 1.0
+#define ROTATION_PID_DERIVATIVE 1.0
+
+#define ROTATION_PID_MIN_INPUT -30.0
+#define ROTATION_PID_MAX_INPUT 30.0
+#define ROTATION_PID_MIN_OUTPUT -0.5
+#define ROTATION_PID_MAX_OUTPUT 0.5
+
+#define ROTATION_PID_TOLERENCE 4.0 //4 percent
+
+#define RANGE_PID_PROPORTION 2.0
+#define RANGE_PID_INTEGRAL 1.0
+#define RANGE_PID_DERIVATIVE 1.0
+
+#define RANGE_PID_MIN_INPUT 0.0
+#define RANGE_PID_MAX_INPUT 240.0
+#define RANGE_PID_MIN_OUTPUT -0.5
+#define RANGE_PID_MAX_OUTPUT 0.5
+
+#define RANGE_PID_SETPOINT 156.0
+#define RANGE_PID_TOLERENCE 5.0  
+
+//Uncomment this to enable the PID tuning section of code that can help tune PIDs
+//by running code in debug mode and using breakpoints.
+//#define PID_TUNING
+
 //Helper Macros
 #define DUMPER_RAMP_EXTENDED(isExtended) {FlipSolenoids(isExtended, &solenoidDumperRampUp, &solenoidDumperRampDown);}
 #define BRIDGE_RAM_EXTENDED(isExtended) {FlipSolenoids(isExtended, &solenoidBridgeRamDown, &solenoidBridgeRamUp);}
@@ -85,14 +121,13 @@ typedef enum
 	SOLENOID_CHANNEL_5_DUMPER_RAMP_UP,
 	SOLENOID_CHANNEL_6_DUMPER_RAMP_DOWN,
 	SOLENOID_CHANNEL_7_CATAPULT_LATCH_EXTEND,
-	SOLENOID_CHANNEL_8_CATAPULT_LATCH_RETRACT,
-	SOLENOID_CHANNEL_9_UNUSED
+	SOLENOID_CHANNEL_8_CATAPULT_LATCH_RETRACT
 }SOLENOID_CHANNEL_TYPE;
 
 typedef enum
 {
 	ANALOG_CHANNEL_1_GYROSCOPE = 1,
-	ANALOG_CHANNEL_2_UNUSED,
+	ANALOG_CHANNEL_2_RANGE_FINDER,
 	ANALOG_CHANNEL_3_UNUSED,
 	ANALOG_CHANNEL_4_UNUSED,
 	ANALOG_CHANNEL_5_UNUSED,
@@ -149,6 +184,15 @@ class Robot2012 : public IterativeRobot
 	Joystick stickLeftDrive;
 	Joystick stickShooter;
 	Gyro gyroscope;
+#ifdef ENABLE_PID_ROTATION
+	GyroControlledTurning rotationControl;
+	PIDController rotationPID;
+#endif
+#ifdef ENABLE_PID_RANGE_FINDER
+	AnalogRangeFinder rangeFinder;
+	SonarControlledDriving sonarDriveControl;
+	PIDController rangePID;
+#endif
 	Compressor compressor;
 
 	Timer timeInState;
@@ -194,6 +238,16 @@ public:
 		stickLeftDrive(2),
 		stickShooter(3),
 		gyroscope(ANALOG_OUTPUT_CHANNEL, ANALOG_CHANNEL_1_GYROSCOPE),
+
+#ifdef ENABLE_PID_ROTATION
+		rotationControl(&jaguarFrontLeft, &jaguarRearLeft, &jaguarFrontRight, &jaguarRearRight),
+		rotationPID(ROTATION_PID_PROPORTION, ROTATION_PID_INTEGRAL, ROTATION_PID_DERIVATIVE, &gyroscope, &rotationControl),
+#endif
+#ifdef ENABLE_PID_RANGE_FINDER
+		rangeFinder(ANALOG_OUTPUT_CHANNEL, ANALOG_CHANNEL_2_RANGE_FINDER),
+		sonarDriveControl(&jaguarFrontLeft, &jaguarRearLeft, &jaguarFrontRight, &jaguarRearRight),
+		rangePID(RANGE_PID_PROPORTION,RANGE_PID_INTEGRAL,RANGE_PID_DERIVATIVE, &rangeFinder, &sonarDriveControl),
+#endif		
 		compressor(DIGITAL_CHANNEL_1_INPUT_COMPRESSOR_SWITCH, RELAY_CHANNEL_1_COMPRESSOR_RELAY),
 		timeInState(),
 		timeSinceBoot()
@@ -212,7 +266,19 @@ public:
 		m_autoPeriodicLoops = 0;
 		m_disabledPeriodicLoops = 0;
 		m_telePeriodicLoops = 0;
-
+#ifdef ENABLE_PID_ROTATION
+		rotationPID.SetInputRange(ROTATION_PID_MIN_INPUT,ROTATION_PID_MAX_INPUT);
+		rotationPID.SetOutputRange(ROTATION_PID_MIN_OUTPUT,ROTATION_PID_MAX_OUTPUT);
+		rotationPID.SetTolerance(ROTATION_PID_TOLERENCE);
+		rotationPID.Disable();
+#endif
+#ifdef ENABLE_PID_RANGE_FINDER
+		rangePID.SetInputRange(RANGE_PID_MIN_INPUT,RANGE_PID_MAX_INPUT);
+		rangePID.SetOutputRange(RANGE_PID_MIN_OUTPUT, RANGE_PID_MAX_OUTPUT);
+		rangePID.SetSetpoint(RANGE_PID_SETPOINT);
+		rangePID.SetTolerance(RANGE_PID_TOLERENCE);
+		rangePID.Disable();
+#endif
 		printf("Robot2012 Constructor Completed\n");
 	}
 	
@@ -278,29 +344,37 @@ public:
 		if (!BUTTON_CAMERA_ALIGN_SHOT_BUTTON())
 		{
 			anglesComputed = false;
+#ifdef ENABLE_PID_ROTATION
+			rotationPID.Disable();
+#endif
 			myRobot.TankDrive(stickLeftDrive,stickRightDrive);	
 			//myRobot.SetSafetyEnabled(true);
 			myRobot.SetSafetyEnabled(false);
 			testCount = 0;
 		}
 		CameraInitialize();
-		AxisCamera &camera = AxisCamera::GetInstance("10.24.74.11");
 
 		
 		ManageAppendages();
 		ManageElevator();
 		ManageCatapult();
-		
+
+	#ifndef ENABLE_PID_ROTATION
+		AxisCamera &camera = AxisCamera::GetInstance("10.24.74.11");
 		if (camera.IsFreshImage())
 		{
 			ColorImage *colorImage = new ColorImage(IMAQ_IMAGE_HSL);
 			camera.GetImage(colorImage);
 			if (BUTTON_CAMERA_ALIGN_SHOT_BUTTON() && (anglesComputed == false))
 			{
+				gyroscope.Reset();
 				DetermineTargetPosition(colorImage);
 			}
 			delete colorImage;
 		}
+		#endif
+		PositionForTarget();
+		driverStationLCD->UpdateLCD();
 	}
 
 
@@ -317,11 +391,13 @@ public:
 	}
 	void TeleopContinuous(void) 
 	{
+	#ifndef ENABLE_PID_ROTATION
 		if ((BUTTON_CAMERA_ALIGN_SHOT_BUTTON()) && 
 			(anglesComputed == true))
 		{
 			RotateToTarget();
 		}
+	#endif
 	}
 
 	//returns 0 if a particle is found
@@ -346,42 +422,61 @@ public:
 		{
 			binaryImage->Write("afterCLRThreshold.bmp");
 			IVA_ProcessImage(imaqImage, binaryImage);
-			
 		}	
 		else
 		{
 			IVA_ProcessImage(imaqImage, (ImageBase *)0);
 		}
 		vector<ParticleAnalysisReport> *reports = binaryImage->GetOrderedParticleAnalysisReports();
-		ParticleAnalysisReport *bottomParticlePtr = NULL;
+		ParticleAnalysisReport *topParticlePtr = NULL;
 		
 		for (int particleIndex = 0; ((particleIndex <  reports->size()) && (particleIndex < 5)); particleIndex++)
 		{
 			ParticleAnalysisReport &thisReport = reports->at(particleIndex);
-			if ((!bottomParticlePtr) || (thisReport.center_mass_y  > bottomParticlePtr->center_mass_y))
+			if ((!topParticlePtr) || (thisReport.center_mass_y  < topParticlePtr->center_mass_y))
 			{
-				bottomParticlePtr = &thisReport;
+				topParticlePtr = &thisReport;
 			}
 		}
-		if (bottomParticlePtr != NULL)
+		if (topParticlePtr != NULL)
 		{
 			returnVal = 0; //indicates success
-			int centerOfMassX = bottomParticlePtr->center_mass_x;
+			int centerOfMassX = topParticlePtr->center_mass_x;
 			
 			angleToTurn = (centerOfMassX - CENTER_OF_IMAGE) * HORIZONTAL_DEGREES_PER_PIXEL;
-			angleAtImage = gyroscope.GetAngle();
 			
-			distanceToTarget = CALCULATE_DISTANCE(bottomParticlePtr->boundingRect.height);
+			distanceToTarget = CALCULATE_DISTANCE(topParticlePtr->boundingRect.height);
 
 			driverStationLCD->PrintfLine((DriverStationLCD::Line) 0, "Angle to turn: %.5f", angleToTurn);
-			driverStationLCD->PrintfLine((DriverStationLCD::Line) 1, "Distance: %.5f", distanceToTarget);
+			//driverStationLCD->PrintfLine((DriverStationLCD::Line) 1, "Distance: %.5f", distanceToTarget);
 			driverStationLCD->UpdateLCD();
 			anglesComputed = true;
+
+#ifdef ENABLE_PID_ROTATION		
+			rotationPID.SetSetpoint(-angleToTurn);
+			#ifdef PID_TUNING
+				float p = rotationPID.GetP();
+				float i = rotationPID.GetI();
+				float d = rotationPID.GetD();
+				rotationPID.SetPID(p,i,d);
+				
+				p = rangePID.GetP();
+				i = rangePID.GetI();
+				d = rangePID.GetD();
+				rangePID.SetPID(p,i,d);
+			#endif
+			
+			
+			
+			rotationPID.Enable();
+#endif
 		}	
 		else
 		{	
 			jaguarFrontLeft.Set(0.0);
 			jaguarFrontRight.Set(0.0);
+			jaguarRearLeft.Set(0.0);
+			jaguarRearRight.Set(0.0);
 			anglesComputed = false;
 		}
 		delete reports;
@@ -392,6 +487,7 @@ public:
 	
 	void RotateToTarget(void)
 	{
+#ifndef ENABLE_PID_ROTATION
 		float angle_traveled = gyroscope.GetAngle() - angleAtImage;
 		float angle_remaining = angleToTurn - angle_traveled;
 		float angle_percent_remaining = angle_remaining / angleToTurn;
@@ -400,6 +496,7 @@ public:
 		{
 			jaguarFrontLeft.Set(-(FAST_TURN * angle_percent_remaining));
 			jaguarFrontRight.Set(-(FAST_TURN * angle_percent_remaining));	
+			error Add the rear motors, dont fix the error until you have.;
 		}
 		//turn left slowly
 		else if (angle_remaining < -3.0)
@@ -433,6 +530,78 @@ public:
 		{
 			jaguarFrontLeft.Set(0.0);
 			jaguarFrontRight.Set(0.0);
+		}
+#endif
+	}
+
+	void PositionForTarget(void)
+	{
+		typedef enum
+		{
+			TARGETING_IDLE,
+			TARGETING_ROTATING,
+			TARGETING_DRIVING_TO_DISTANCE,
+		}TARGETING_STATE;
+		
+		static TARGETING_STATE state_targeting = TARGETING_IDLE;
+		driverStationLCD->PrintfLine((DriverStationLCD::Line) 1, "Angle Turned: %f", gyroscope.GetAngle());
+		driverStationLCD->PrintfLine((DriverStationLCD::Line) 4, "Range to target: %f", rangeFinder.GetRangeInches());
+		driverStationLCD->UpdateLCD();
+		
+		AxisCamera &camera = AxisCamera::GetInstance("10.24.74.11");
+		switch (state_targeting)
+		{
+		case TARGETING_IDLE:
+			rotationPID.Disable();
+			rangePID.Disable();
+			if (camera.IsFreshImage())
+			{
+				if (BUTTON_CAMERA_ALIGN_SHOT_BUTTON() && (anglesComputed == false))
+				{
+					ColorImage *colorImage = new ColorImage(IMAQ_IMAGE_HSL);
+					camera.GetImage(colorImage);
+					gyroscope.Reset();
+					if (DetermineTargetPosition(colorImage) == 0)
+					{
+						state_targeting = TARGETING_ROTATING;
+					}
+					delete colorImage;
+				}
+			}
+			break;
+		case TARGETING_ROTATING:
+			if (BUTTON_CAMERA_ALIGN_SHOT_BUTTON() == false)
+			{
+				rotationPID.Disable();
+				state_targeting = TARGETING_IDLE;
+			}
+			else if (rotationPID.OnTarget())
+			{
+				rotationPID.Disable();
+				state_targeting = TARGETING_DRIVING_TO_DISTANCE;
+			}
+			else
+			{
+				rotationPID.Enable();
+			}
+			break;
+		case TARGETING_DRIVING_TO_DISTANCE:
+			if (BUTTON_CAMERA_ALIGN_SHOT_BUTTON() == false)
+			{
+				rangePID.Disable();
+				state_targeting = TARGETING_IDLE;
+			}
+			else if (rotationPID.OnTarget())
+			{
+				rangePID.Disable();
+				state_targeting = TARGETING_ROTATING;
+			}
+			else
+			{
+				rangePID.Enable();
+			}
+			break;
+			
 		}
 	}
 	
@@ -542,23 +711,19 @@ public:
 	void ManageElevator(void)
 	{
 		float throttle = THROTTLE_ELEVATORS();
-		static float prev_throttle;
-		if (throttle != prev_throttle)
-		{
-			driverStationLCD->PrintfLine((DriverStationLCD::Line) 2, "Throttle: %f", throttle);
-			driverStationLCD->UpdateLCD();
-			prev_throttle = throttle;
-		}
+		driverStationLCD->PrintfLine((DriverStationLCD::Line) 3, "Throttle: %f", throttle);
+		
+			
 		
 		if (BUTTON_ELEVATOR_BOTTOM_UP())
 		{
-			jaguarElevatorBottom1.Set(-throttle, BOTTOM_ROLLERS_SYNC_GROUP);
-			jaguarElevatorBottom2.Set(-throttle, BOTTOM_ROLLERS_SYNC_GROUP);
+			jaguarElevatorBottom1.Set(-ELEVATOR_SPEED_BOTTOM, BOTTOM_ROLLERS_SYNC_GROUP);
+			jaguarElevatorBottom2.Set(-ELEVATOR_SPEED_BOTTOM, BOTTOM_ROLLERS_SYNC_GROUP);
 		}
 		else if (BUTTON_ELEVATOR_BOTTOM_DOWN())
 		{
-			jaguarElevatorBottom1.Set(throttle, BOTTOM_ROLLERS_SYNC_GROUP);
-			jaguarElevatorBottom2.Set(throttle, BOTTOM_ROLLERS_SYNC_GROUP);
+			jaguarElevatorBottom1.Set(ELEVATOR_SPEED_BOTTOM, BOTTOM_ROLLERS_SYNC_GROUP);
+			jaguarElevatorBottom2.Set(ELEVATOR_SPEED_BOTTOM, BOTTOM_ROLLERS_SYNC_GROUP);
 		}
 		else
 		{
@@ -568,11 +733,11 @@ public:
 		
 		if (BUTTON_ELEVATOR_TOP_UP())
 		{
-			jaguarElevatorTop.Set(throttle);
+			jaguarElevatorTop.Set(ELEVATOR_SPEED_TOP);
 		}
 		else if (BUTTON_ELEVATOR_TOP_DOWN())
 		{
-			jaguarElevatorTop.Set(-throttle);
+			jaguarElevatorTop.Set(-ELEVATOR_SPEED_TOP);
 		}
 		else
 		{
@@ -581,7 +746,7 @@ public:
 		
 		if (BUTTON_DUMPER_ROLLER())
 		{
-			jaguarDumperRoller.Set(0.5F);
+			jaguarDumperRoller.Set(-throttle);
 		}
 		else
 		{
@@ -661,8 +826,6 @@ public:
 			}
 			break;
 		}
-		driverStationLCD->PrintfLine((DriverStationLCD::Line) 3, "Catapult State: %d\tDuration: %f", catapult_state, state_timer.Get());
-		driverStationLCD->UpdateLCD();
 	}
 	
 	void CameraInitialize(void)
@@ -675,6 +838,8 @@ public:
 				camera.WriteBrightness(CAMERA_BRIGHTNESS_LEVEL);
 				camera.WriteColorLevel(CAMERA_COLOR_LEVEL);
 				camera.WriteMaxFPS(CAMERA_MAX_FPS);
+				//camera.WriteResolution(camera.kResolution_320x240);
+				//camera.WriteWhiteBalance(camera.kWhiteBalance_FixedFlourescent1);
 			}
 		}
 	}

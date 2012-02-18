@@ -163,6 +163,10 @@ Project2012_partialImage/$(MODE_DIR)/% : LIBPATH =
 Project2012_partialImage/$(MODE_DIR)/% : LIBS = 
 Project2012_partialImage/$(MODE_DIR)/% : OBJ_DIR := Project2012_partialImage/$(MODE_DIR)
 
+Project2012_partialImage/$(MODE_DIR)/Objects/Project2012/AnalogRangeFinder.o : $(PRJ_ROOT_DIR)/AnalogRangeFinder.cpp $(FORCE_FILE_BUILD)
+	$(TRACE_FLAG)if [ ! -d "`dirname "$@"`" ]; then mkdir -p "`dirname "$@"`"; fi;echo "building $@"; $(TOOL_PATH)ccppc $(DEBUGFLAGS_C++-Compiler) $(CC_ARCH_SPEC) -ansi -Wall  -MD -MP $(ADDED_C++FLAGS) $(IDE_INCLUDES) $(ADDED_INCLUDES) -DCPU=$(CPU) -DTOOL_FAMILY=$(TOOL_FAMILY) -DTOOL=$(TOOL) -D_WRS_KERNEL   $(DEFINES) -o "$@" -c "$<"
+
+
 Project2012_partialImage/$(MODE_DIR)/Objects/Project2012/ImageProcessing.o : $(PRJ_ROOT_DIR)/ImageProcessing.cpp $(FORCE_FILE_BUILD)
 	$(TRACE_FLAG)if [ ! -d "`dirname "$@"`" ]; then mkdir -p "`dirname "$@"`"; fi;echo "building $@"; $(TOOL_PATH)ccppc $(DEBUGFLAGS_C++-Compiler) $(CC_ARCH_SPEC) -ansi -Wall  -MD -MP $(ADDED_C++FLAGS) $(IDE_INCLUDES) $(ADDED_INCLUDES) -DCPU=$(CPU) -DTOOL_FAMILY=$(TOOL_FAMILY) -DTOOL=$(TOOL) -D_WRS_KERNEL   $(DEFINES) -o "$@" -c "$<"
 
@@ -171,8 +175,14 @@ Project2012_partialImage/$(MODE_DIR)/Objects/Project2012/Robot2012.o : $(PRJ_ROO
 	$(TRACE_FLAG)if [ ! -d "`dirname "$@"`" ]; then mkdir -p "`dirname "$@"`"; fi;echo "building $@"; $(TOOL_PATH)ccppc $(DEBUGFLAGS_C++-Compiler) $(CC_ARCH_SPEC) -ansi -Wall  -MD -MP $(ADDED_C++FLAGS) $(IDE_INCLUDES) $(ADDED_INCLUDES) -DCPU=$(CPU) -DTOOL_FAMILY=$(TOOL_FAMILY) -DTOOL=$(TOOL) -D_WRS_KERNEL   $(DEFINES) -o "$@" -c "$<"
 
 
-OBJECTS_Project2012_partialImage = Project2012_partialImage/$(MODE_DIR)/Objects/Project2012/ImageProcessing.o \
-	 Project2012_partialImage/$(MODE_DIR)/Objects/Project2012/Robot2012.o
+Project2012_partialImage/$(MODE_DIR)/Objects/Project2012/customPIDs.o : $(PRJ_ROOT_DIR)/customPIDs.cpp $(FORCE_FILE_BUILD)
+	$(TRACE_FLAG)if [ ! -d "`dirname "$@"`" ]; then mkdir -p "`dirname "$@"`"; fi;echo "building $@"; $(TOOL_PATH)ccppc $(DEBUGFLAGS_C++-Compiler) $(CC_ARCH_SPEC) -ansi -Wall  -MD -MP $(ADDED_C++FLAGS) $(IDE_INCLUDES) $(ADDED_INCLUDES) -DCPU=$(CPU) -DTOOL_FAMILY=$(TOOL_FAMILY) -DTOOL=$(TOOL) -D_WRS_KERNEL   $(DEFINES) -o "$@" -c "$<"
+
+
+OBJECTS_Project2012_partialImage = Project2012_partialImage/$(MODE_DIR)/Objects/Project2012/AnalogRangeFinder.o \
+	 Project2012_partialImage/$(MODE_DIR)/Objects/Project2012/ImageProcessing.o \
+	 Project2012_partialImage/$(MODE_DIR)/Objects/Project2012/Robot2012.o \
+	 Project2012_partialImage/$(MODE_DIR)/Objects/Project2012/customPIDs.o
 
 Project2012_partialImage/$(MODE_DIR)/Project2012_partialImage.o : $(OBJECTS_Project2012_partialImage)
 	$(TRACE_FLAG)if [ ! -d "`dirname "$@"`" ]; then mkdir -p "`dirname "$@"`"; fi;echo "building $@"; $(TOOL_PATH)ccppc -r -nostdlib -Wl,-X  -o "$@" $(OBJECTS_Project2012_partialImage) $(LIBPATH) $(LIBS) $(ADDED_LIBPATH) $(ADDED_LIBS)  && if [ "$(EXPAND_DBG)" = "1" ]; then plink "$@";fi
@@ -186,7 +196,8 @@ Project2012_partialImage/$(MODE_DIR)/Project2012_partialImage_clean :
 
 force : 
 
-DEP_FILES := Project2012_partialImage/$(MODE_DIR)/Objects/Project2012/ImageProcessing.d Project2012_partialImage/$(MODE_DIR)/Objects/Project2012/Robot2012.d
+DEP_FILES := Project2012_partialImage/$(MODE_DIR)/Objects/Project2012/AnalogRangeFinder.d Project2012_partialImage/$(MODE_DIR)/Objects/Project2012/ImageProcessing.d Project2012_partialImage/$(MODE_DIR)/Objects/Project2012/Robot2012.d \
+	 Project2012_partialImage/$(MODE_DIR)/Objects/Project2012/customPIDs.d
 -include $(DEP_FILES)
 
 
