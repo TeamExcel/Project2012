@@ -14,6 +14,7 @@ void GyroControlledTurning::PIDWrite(float output)
 {
 	DriverStationLCD *driverStationLCD = DriverStationLCD::GetInstance();
 	driverStationLCD->PrintfLine((DriverStationLCD::Line) 2, "PID Output: %f", output);
+	output = -output;
 	#ifdef ENABLE_PID_ROTATION
 	if (jaguarFrontLeft)
 		jaguarFrontLeft->Set(output);
@@ -43,8 +44,8 @@ void SonarControlledDriving::PIDWrite(float output)
 	if (jaguarRearLeft)
 		jaguarRearLeft->Set(output);
 	if (jaguarFrontRight)
-		jaguarFrontRight->Set(output);
+		jaguarFrontRight->Set(-output);
 	if (jaguarRearRight)
-		jaguarRearRight->Set(output);
+		jaguarRearRight->Set(-output);
 	#endif
 }
