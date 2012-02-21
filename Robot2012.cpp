@@ -64,28 +64,29 @@
 
 
 //PID Parameters
-#define ROTATION_PID_PROPORTION 2.0
-#define ROTATION_PID_INTEGRAL 1.0
-#define ROTATION_PID_DERIVATIVE 1.0
+#define ROTATION_PID_PROPORTION 7.0
+#define ROTATION_PID_INTEGRAL 0.0
+#define ROTATION_PID_DERIVATIVE 3.0
 
 #define ROTATION_PID_MIN_INPUT -30.0
 #define ROTATION_PID_MAX_INPUT 30.0
-#define ROTATION_PID_MIN_OUTPUT -0.5
-#define ROTATION_PID_MAX_OUTPUT 0.5
+#define ROTATION_PID_MIN_OUTPUT -0.25
+#define ROTATION_PID_MAX_OUTPUT 0.25
 
-#define ROTATION_PID_TOLERENCE 4.0 //4 percent
+#define ROTATION_PID_TOLERENCE 4.00 //4 percent
+#define ROTATION_PID_SETPOINT_OFFSET -2.0
 
-#define RANGE_PID_PROPORTION 2.0
-#define RANGE_PID_INTEGRAL 1.0
-#define RANGE_PID_DERIVATIVE 1.0
+#define RANGE_PID_PROPORTION 7.0
+#define RANGE_PID_INTEGRAL 0.0
+#define RANGE_PID_DERIVATIVE 3.0
 
 #define RANGE_PID_MIN_INPUT 0.0
 #define RANGE_PID_MAX_INPUT 240.0
-#define RANGE_PID_MIN_OUTPUT -0.5
-#define RANGE_PID_MAX_OUTPUT 0.5
+#define RANGE_PID_MIN_OUTPUT -0.25
+#define RANGE_PID_MAX_OUTPUT 0.25
 
-#define RANGE_PID_SETPOINT 156.0
-#define RANGE_PID_TOLERENCE 5.0  
+#define RANGE_PID_SETPOINT 144.0
+#define RANGE_PID_TOLERENCE 5.0 
 
 //Uncomment this to enable the PID tuning section of code that can help tune PIDs
 //by running code in debug mode and using breakpoints.
@@ -96,7 +97,7 @@
 #define BRIDGE_RAM_EXTENDED(isExtended) {FlipSolenoids(isExtended, &solenoidBridgeRamDown, &solenoidBridgeRamUp);}
 #define CATAPULT_PUSHER_EXTENDED(isExtended) {FlipSolenoids(isExtended, &solenoidCatapultPusher, &solenoidCatapultPuller);}
 #define CATAPULT_LATCH_EXTENDED(isExtended) {FlipSolenoids(isExtended, &solenoidCatapultLatchExtend, &solenoidCatapultLatchRetract);}
-
+#define DISABLE_PID(pid) {if (pid.IsEnabled())pid.Disable();}
 typedef enum
 {
 	PWM_CHANNEL_1_JAGUAR_REAR_RIGHT = 1,
@@ -213,6 +214,7 @@ class Robot2012 : public IterativeRobot
 	bool anglesComputed;
 	int testCount;
 	float distanceToTarget;
+	bool targetLocked;
 		
 public:
 
@@ -345,7 +347,10 @@ public:
 		{
 			anglesComputed = false;
 #ifdef ENABLE_PID_ROTATION
-			rotationPID.Disable();
+			DISABLE_PID(rotationPID);
+#endif
+#ifdef ENABLE_PID_RANGE_FINDER
+			DISABLE_PID(rangePID);
 #endif
 			myRobot.TankDrive(stickLeftDrive,stickRightDrive);	
 			//myRobot.SetSafetyEnabled(true);
@@ -447,28 +452,34 @@ public:
 			
 			distanceToTarget = CALCULATE_DISTANCE(topParticlePtr->boundingRect.height);
 
-			driverStationLCD->PrintfLine((DriverStationLCD::Line) 0, "Angle to turn: %.5f", angleToTurn);
+			driverStationLCD->PrintfLine((DriverStationLCD::Line) 0, "Angle to turn: %.5f", -angleToTurn);
 			//driverStationLCD->PrintfLine((DriverStationLCD::Line) 1, "Distance: %.5f", distanceToTarget);
 			driverStationLCD->UpdateLCD();
 			anglesComputed = true;
 
 #ifdef ENABLE_PID_ROTATION		
-			rotationPID.SetSetpoint(-angleToTurn);
 			#ifdef PID_TUNING
+				static float tol_angle = ROTATION_PID_TOLERENCE;
+				static float set_angle = ROTATION_PID_SETPOINT_OFFSET;
 				float p = rotationPID.GetP();
 				float i = rotationPID.GetI();
 				float d = rotationPID.GetD();
 				rotationPID.SetPID(p,i,d);
 				
+				rotationPID.SetTolerance(tol_angle);
+				rotationPID.SetSetpoint((-angleToTurn) + set_angle);
+				
+				static float tol_range = RANGE_PID_TOLERENCE;
+				static float set_range = RANGE_PID_SETPOINT;
 				p = rangePID.GetP();
 				i = rangePID.GetI();
 				d = rangePID.GetD();
 				rangePID.SetPID(p,i,d);
+				rangePID.SetTolerance(tol_range);
+				rangePID.SetSetpoint(set_range);
+			#else
+			rotationPID.SetSetpoint((-angleToTurn) + ROTATION_PID_SETPOINT_OFFSET);
 			#endif
-			
-			
-			
-			rotationPID.Enable();
 #endif
 		}	
 		else
@@ -534,77 +545,6 @@ public:
 #endif
 	}
 
-	void PositionForTarget(void)
-	{
-		typedef enum
-		{
-			TARGETING_IDLE,
-			TARGETING_ROTATING,
-			TARGETING_DRIVING_TO_DISTANCE,
-		}TARGETING_STATE;
-		
-		static TARGETING_STATE state_targeting = TARGETING_IDLE;
-		driverStationLCD->PrintfLine((DriverStationLCD::Line) 1, "Angle Turned: %f", gyroscope.GetAngle());
-		driverStationLCD->PrintfLine((DriverStationLCD::Line) 4, "Range to target: %f", rangeFinder.GetRangeInches());
-		driverStationLCD->UpdateLCD();
-		
-		AxisCamera &camera = AxisCamera::GetInstance("10.24.74.11");
-		switch (state_targeting)
-		{
-		case TARGETING_IDLE:
-			rotationPID.Disable();
-			rangePID.Disable();
-			if (camera.IsFreshImage())
-			{
-				if (BUTTON_CAMERA_ALIGN_SHOT_BUTTON() && (anglesComputed == false))
-				{
-					ColorImage *colorImage = new ColorImage(IMAQ_IMAGE_HSL);
-					camera.GetImage(colorImage);
-					gyroscope.Reset();
-					if (DetermineTargetPosition(colorImage) == 0)
-					{
-						state_targeting = TARGETING_ROTATING;
-					}
-					delete colorImage;
-				}
-			}
-			break;
-		case TARGETING_ROTATING:
-			if (BUTTON_CAMERA_ALIGN_SHOT_BUTTON() == false)
-			{
-				rotationPID.Disable();
-				state_targeting = TARGETING_IDLE;
-			}
-			else if (rotationPID.OnTarget())
-			{
-				rotationPID.Disable();
-				state_targeting = TARGETING_DRIVING_TO_DISTANCE;
-			}
-			else
-			{
-				rotationPID.Enable();
-			}
-			break;
-		case TARGETING_DRIVING_TO_DISTANCE:
-			if (BUTTON_CAMERA_ALIGN_SHOT_BUTTON() == false)
-			{
-				rangePID.Disable();
-				state_targeting = TARGETING_IDLE;
-			}
-			else if (rotationPID.OnTarget())
-			{
-				rangePID.Disable();
-				state_targeting = TARGETING_ROTATING;
-			}
-			else
-			{
-				rangePID.Enable();
-			}
-			break;
-			
-		}
-	}
-	
 	void ManageAppendages(void)
 	{
 		typedef enum
@@ -746,7 +686,7 @@ public:
 		
 		if (BUTTON_DUMPER_ROLLER())
 		{
-			jaguarDumperRoller.Set(-throttle);
+			jaguarDumperRoller.Set(throttle);
 		}
 		else
 		{
@@ -766,6 +706,7 @@ public:
 		}CATAPULT_STATE;
 		
 		static CATAPULT_STATE catapult_state = CATAPULT_INITIAL;
+		static bool button_released = true;
 		static Timer state_timer;
 		state_timer.Start();
 		switch (catapult_state)
@@ -773,16 +714,19 @@ public:
 		case CATAPULT_INITIAL:
 			CATAPULT_LATCH_EXTENDED(false);
 			CATAPULT_PUSHER_EXTENDED(false);
-			if (BUTTON_CATAPULT_SHOOT())
+			if (!BUTTON_CATAPULT_SHOOT())button_released = true;
+			if (BUTTON_CATAPULT_SHOOT() && button_released)
 			{
 				CATAPULT_PUSHER_EXTENDED(true);
 				catapult_state = CATAPULT_COCKING;
 				state_timer.Reset();
+				button_released = false;
 			}
 			break;
 		case CATAPULT_COCKING:
 			CATAPULT_PUSHER_EXTENDED(true);
 			CATAPULT_LATCH_EXTENDED(false);
+			if (!BUTTON_CATAPULT_LATCH())button_released = true;
 			if (state_timer.Get() >= 2.0);
 			{
 				state_timer.Reset();
@@ -792,23 +736,25 @@ public:
 		case CATAPULT_WAITING_LATCH:
 			CATAPULT_LATCH_EXTENDED(false);
 			CATAPULT_PUSHER_EXTENDED(true);
-			if (BUTTON_CATAPULT_LATCH())
+			if (!BUTTON_CATAPULT_LATCH())button_released = true;
+			if (BUTTON_CATAPULT_LATCH() && button_released)
 			{
 				CATAPULT_LATCH_EXTENDED(true);
 				//maybe switch solonoid?
 				state_timer.Reset();
 				catapult_state = CATAPULT_READY;
+				button_released = false;
 			}
 			break;
 		case CATAPULT_READY:
 			CATAPULT_PUSHER_EXTENDED(false);
 			CATAPULT_LATCH_EXTENDED(true);
-			if (BUTTON_CATAPULT_SHOOT() && (state_timer.Get() > 0.1))
+			if (!BUTTON_CATAPULT_SHOOT())button_released = true;
+			if (BUTTON_CATAPULT_SHOOT() && (state_timer.Get() > 0.2) && button_released)
 			{
 				if ((BUTTON_CATAPULT_FORCE_SHOOT() == true) ||
 					((anglesComputed == true) && 
-					 (angleToTurn < 1.0) && 
-					 (angleToTurn > -1.0))) 
+					 (targetLocked == true))) 
 				{
 					CATAPULT_LATCH_EXTENDED(false);
 					state_timer.Reset();
@@ -819,6 +765,7 @@ public:
 		case CATAPULT_FIRING:
 			CATAPULT_PUSHER_EXTENDED(false);
 			CATAPULT_LATCH_EXTENDED(false);
+			if (!BUTTON_CATAPULT_SHOOT())button_released = true;
 			if (state_timer.Get() >= 1.0)
 			{
 				CATAPULT_PUSHER_EXTENDED(true);
@@ -827,7 +774,124 @@ public:
 			break;
 		}
 	}
+
+	void PositionForTarget(void)
+	{
+		typedef enum
+		{
+			TARGETING_IDLE,
+			TARGETING_ROTATING,
+			TARGETING_DRIVING_TO_DISTANCE,
+			TARGETING_ROTATING_FINAL,
+			TARGETING_LOCKED
+		}TARGETING_STATE;
+		
+		static TARGETING_STATE state_targeting = TARGETING_IDLE;
+		driverStationLCD->PrintfLine((DriverStationLCD::Line) 1, "Angle Turned: %f", gyroscope.GetAngle());
+		driverStationLCD->PrintfLine((DriverStationLCD::Line) 4, "Range to target: %f", rangeFinder.GetRangeInches());
+		driverStationLCD->PrintfLine((DriverStationLCD::Line) 5, "Autoposition State: %d", state_targeting);
+		driverStationLCD->UpdateLCD();
+		
+		static int on_target_count = 0;
+		AxisCamera &camera = AxisCamera::GetInstance("10.24.74.11");
+		switch (state_targeting)
+		{
+		case TARGETING_IDLE:
+			targetLocked = false;
+
+			DISABLE_PID(rotationPID);
+			DISABLE_PID(rangePID);
+			if (camera.IsFreshImage())
+			{
+				if (BUTTON_CAMERA_ALIGN_SHOT_BUTTON() && (anglesComputed == false))
+				{
+					ColorImage *colorImage = new ColorImage(IMAQ_IMAGE_HSL);
+					camera.GetImage(colorImage);
+					gyroscope.Reset();
+					if (DetermineTargetPosition(colorImage) == 0)
+					{
+						rotationPID.Enable();
+						state_targeting = TARGETING_ROTATING;
+						on_target_count = 0;
+					}
+					delete colorImage;
+				}
+			}
+			break;
+		case TARGETING_ROTATING:
+		case TARGETING_ROTATING_FINAL:
+			if (BUTTON_CAMERA_ALIGN_SHOT_BUTTON() == false)
+			{
+				DISABLE_PID(rotationPID);
+				state_targeting = TARGETING_IDLE;
+				on_target_count = 0;
+			}
+			else if (rotationPID.OnTarget() && (on_target_count > 10))
+			{
+				DISABLE_PID(rotationPID);
+				if (state_targeting == TARGETING_ROTATING)
+				{
+					rangePID.Enable();
+					state_targeting = TARGETING_DRIVING_TO_DISTANCE;
+				}
+				else
+				{
+					DISABLE_PID(rotationPID);
+					state_targeting = TARGETING_LOCKED;
+					targetLocked = true;
+				}
+				on_target_count = 0;
+			}
+			else if (rotationPID.OnTarget())
+			{
+				on_target_count++;
+			}
+			else
+			{
+				rotationPID.Enable();
+				on_target_count = 0;
+			}
+			break;
+		case TARGETING_DRIVING_TO_DISTANCE:
+			if (BUTTON_CAMERA_ALIGN_SHOT_BUTTON() == false)
+			{
+				DISABLE_PID(rangePID);
+				state_targeting = TARGETING_IDLE;
+				on_target_count = 0;
+			}
+			else if (rotationPID.OnTarget() && (on_target_count > 10))
+			{
+				DISABLE_PID(rangePID);
+				state_targeting = TARGETING_ROTATING_FINAL;
+				on_target_count = 0;
+			}
+			else if (rotationPID.OnTarget())
+			{
+				on_target_count++;
+			}
+			else
+			{
+				rangePID.Enable();
+				on_target_count = 0;
+			}
+			break;
+		case TARGETING_LOCKED:
+
+			DISABLE_PID(rotationPID);
+			DISABLE_PID(rangePID);
+			targetLocked = true;
+
+			if (BUTTON_CAMERA_ALIGN_SHOT_BUTTON() == false)
+			{
+				state_targeting = TARGETING_IDLE;
+				targetLocked = false;
+			}
+			break;
+			
+		}
+	}
 	
+
 	void CameraInitialize(void)
 	{
 		if (cameraInitialized == false)
