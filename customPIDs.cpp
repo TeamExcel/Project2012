@@ -12,8 +12,6 @@ GyroControlledTurning::GyroControlledTurning(Jaguar *frontLeft, Jaguar *rearLeft
 #include "DriverStationLCD.h"
 void GyroControlledTurning::PIDWrite(float output)
 {
-	DriverStationLCD *driverStationLCD = DriverStationLCD::GetInstance();
-	driverStationLCD->PrintfLine((DriverStationLCD::Line) 2, "PID Output: %f", output);
 	output = -output;
 	#ifdef ENABLE_PID_ROTATION
 	if (jaguarFrontLeft)
@@ -38,6 +36,8 @@ SonarControlledDriving::SonarControlledDriving(Jaguar *frontLeft, Jaguar *rearLe
 
 void SonarControlledDriving::PIDWrite(float output)
 {
+	DriverStationLCD *driverStationLCD = DriverStationLCD::GetInstance();
+	driverStationLCD->PrintfLine((DriverStationLCD::Line) 2, "PID Output: %f", output);
 	#ifdef ENABLE_PID_ROTATION
 	if (jaguarFrontLeft)
 		jaguarFrontLeft->Set(output);
