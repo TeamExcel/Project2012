@@ -64,29 +64,29 @@
 
 
 //PID Parameters
-#define ROTATION_PID_PROPORTION 7.0
-#define ROTATION_PID_INTEGRAL 0.0
-#define ROTATION_PID_DERIVATIVE 3.0
+#define ROTATION_PID_PROPORTION 0.12
+#define ROTATION_PID_INTEGRAL 0.01
+#define ROTATION_PID_DERIVATIVE 0.02
 
 #define ROTATION_PID_MIN_INPUT -30.0
 #define ROTATION_PID_MAX_INPUT 30.0
-#define ROTATION_PID_MIN_OUTPUT -0.25
-#define ROTATION_PID_MAX_OUTPUT 0.25
+#define ROTATION_PID_MIN_OUTPUT -0.50
+#define ROTATION_PID_MAX_OUTPUT 0.50
 
-#define ROTATION_PID_TOLERENCE 4.00 //4 percent
-#define ROTATION_PID_SETPOINT_OFFSET -2.0
+#define ROTATION_PID_TOLERENCE 0.50 //4 percent
+#define ROTATION_PID_SETPOINT_OFFSET -0.0 //negative adjusts to the right
 
-#define RANGE_PID_PROPORTION 7.0
-#define RANGE_PID_INTEGRAL 0.0
-#define RANGE_PID_DERIVATIVE 3.0
+#define RANGE_PID_PROPORTION 0.09
+#define RANGE_PID_INTEGRAL 0.005
+#define RANGE_PID_DERIVATIVE 0.06
 
 #define RANGE_PID_MIN_INPUT 0.0
 #define RANGE_PID_MAX_INPUT 240.0
-#define RANGE_PID_MIN_OUTPUT -0.25
-#define RANGE_PID_MAX_OUTPUT 0.25
+#define RANGE_PID_MIN_OUTPUT -0.40
+#define RANGE_PID_MAX_OUTPUT 0.40
 
-#define RANGE_PID_SETPOINT 144.0
-#define RANGE_PID_TOLERENCE 5.0 
+#define RANGE_PID_SETPOINT 142.0
+#define RANGE_PID_TOLERENCE 4.0
 
 //Uncomment this to enable the PID tuning section of code that can help tune PIDs
 //by running code in debug mode and using breakpoints.
@@ -97,7 +97,7 @@
 #define BRIDGE_RAM_EXTENDED(isExtended) {FlipSolenoids(isExtended, &solenoidBridgeRamDown, &solenoidBridgeRamUp);}
 #define CATAPULT_PUSHER_EXTENDED(isExtended) {FlipSolenoids(isExtended, &solenoidCatapultPusher, &solenoidCatapultPuller);}
 #define CATAPULT_LATCH_EXTENDED(isExtended) {FlipSolenoids(isExtended, &solenoidCatapultLatchExtend, &solenoidCatapultLatchRetract);}
-#define DISABLE_PID(pid) {if (pid.IsEnabled())pid.Disable();}
+#define DISABLE_PID(pid) {if (pid.IsEnabled()){pid.Disable();pid.Reset();}}
 typedef enum
 {
 	PWM_CHANNEL_1_JAGUAR_REAR_RIGHT = 1,
@@ -172,7 +172,7 @@ class Robot2012 : public IterativeRobot
 	Jaguar jaguarElevatorBottom1;
 	Jaguar jaguarElevatorBottom2;
 	Jaguar jaguarElevatorTop;
-	Jaguar jaguarDumperRoller;
+	Victor victorDumperRoller;
 	Solenoid solenoidCatapultPusher;
 	Solenoid solenoidCatapultPuller;
 	Solenoid solenoidBridgeRamDown;
@@ -227,7 +227,7 @@ public:
 		jaguarElevatorBottom1(DIGITAL_OUTPUT_CHANNEL, PWM_CHANNEL_5_JAGUAR_ELEVATOR_BOTTOM_1),
 		jaguarElevatorBottom2(DIGITAL_OUTPUT_CHANNEL, PWM_CHANNEL_6_JAGUAR_ELEVATOR_BOTTOM_2),
 		jaguarElevatorTop(DIGITAL_OUTPUT_CHANNEL, PWM_CHANNEL_7_JAGUAR_ELEVATOR_TOP),
-		jaguarDumperRoller(DIGITAL_OUTPUT_CHANNEL, PWM_CHANNEL_8_JAGUAR_DUMPER_ROLLER),
+		victorDumperRoller(DIGITAL_OUTPUT_CHANNEL, PWM_CHANNEL_8_JAGUAR_DUMPER_ROLLER),
 		solenoidCatapultPusher(SOLENOID_OUTPUT_CHANNEL, SOLENOID_CHANNEL_1_CATAPULT_PUSHER),
 		solenoidCatapultPuller(SOLENOID_OUTPUT_CHANNEL, SOLENOID_CHANNEL_2_CATAPULT_PULLER),
 		solenoidBridgeRamDown(SOLENOID_OUTPUT_CHANNEL, SOLENOID_CHANNEL_3_BRIDGE_RAM_DOWN),
@@ -686,11 +686,11 @@ public:
 		
 		if (BUTTON_DUMPER_ROLLER())
 		{
-			jaguarDumperRoller.Set(throttle);
+			victorDumperRoller.Set(throttle);
 		}
 		else
 		{
-			jaguarDumperRoller.Set(0.0);
+			victorDumperRoller.Set(0.0);
 		}
 	}
 	
@@ -715,6 +715,7 @@ public:
 			CATAPULT_LATCH_EXTENDED(false);
 			CATAPULT_PUSHER_EXTENDED(false);
 			if (!BUTTON_CATAPULT_SHOOT())button_released = true;
+			//TODO Make this use a timer instead
 			if (BUTTON_CATAPULT_SHOOT() && button_released)
 			{
 				CATAPULT_PUSHER_EXTENDED(true);
@@ -836,7 +837,6 @@ public:
 				}
 				else
 				{
-					DISABLE_PID(rotationPID);
 					state_targeting = TARGETING_LOCKED;
 					targetLocked = true;
 				}
@@ -844,6 +844,7 @@ public:
 			}
 			else if (rotationPID.OnTarget())
 			{
+				rotationPID.Enable();
 				on_target_count++;
 			}
 			else
@@ -859,14 +860,15 @@ public:
 				state_targeting = TARGETING_IDLE;
 				on_target_count = 0;
 			}
-			else if (rotationPID.OnTarget() && (on_target_count > 10))
+			else if (rangePID.OnTarget() && (on_target_count > 20))
 			{
 				DISABLE_PID(rangePID);
 				state_targeting = TARGETING_ROTATING_FINAL;
 				on_target_count = 0;
 			}
-			else if (rotationPID.OnTarget())
+			else if (rangePID.OnTarget())
 			{
+				rangePID.Enable();
 				on_target_count++;
 			}
 			else
