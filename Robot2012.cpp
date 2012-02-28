@@ -73,12 +73,13 @@
 #define ROTATION_PID_MIN_OUTPUT -0.50
 #define ROTATION_PID_MAX_OUTPUT 0.50
 
-#define ROTATION_PID_TOLERENCE 0.50 //4 percent
+#define ROTATION_PID_TOLERENCE_FIRST 2.50
+#define ROTATION_PID_TOLERENCE_LAST 0.50
 #define ROTATION_PID_SETPOINT_OFFSET -0.0 //negative adjusts to the right
 
-#define RANGE_PID_PROPORTION 0.09
-#define RANGE_PID_INTEGRAL 0.005
-#define RANGE_PID_DERIVATIVE 0.06
+#define RANGE_PID_PROPORTION 0.02
+#define RANGE_PID_INTEGRAL 0.0005
+#define RANGE_PID_DERIVATIVE 0.005
 
 #define RANGE_PID_MIN_INPUT 0.0
 #define RANGE_PID_MAX_INPUT 240.0
@@ -184,16 +185,14 @@ class Robot2012 : public IterativeRobot
 	Joystick stickRightDrive; // only joystick
 	Joystick stickLeftDrive;
 	Joystick stickShooter;
+	KinectStick kinectLeft;
+	KinectStick kinectRight;
 	Gyro gyroscope;
-#ifdef ENABLE_PID_ROTATION
 	GyroControlledTurning rotationControl;
 	PIDController rotationPID;
-#endif
-#ifdef ENABLE_PID_RANGE_FINDER
 	AnalogRangeFinder rangeFinder;
 	SonarControlledDriving sonarDriveControl;
 	PIDController rangePID;
-#endif
 	Compressor compressor;
 
 	Timer timeInState;
@@ -239,17 +238,15 @@ public:
 		stickRightDrive(1),
 		stickLeftDrive(2),
 		stickShooter(3),
+		kinectLeft(1),
+		kinectRight(2),
 		gyroscope(ANALOG_OUTPUT_CHANNEL, ANALOG_CHANNEL_1_GYROSCOPE),
-
-#ifdef ENABLE_PID_ROTATION
+		//TODO pass in myRobot instead of all the jags and update the PIDs
 		rotationControl(&jaguarFrontLeft, &jaguarRearLeft, &jaguarFrontRight, &jaguarRearRight),
 		rotationPID(ROTATION_PID_PROPORTION, ROTATION_PID_INTEGRAL, ROTATION_PID_DERIVATIVE, &gyroscope, &rotationControl),
-#endif
-#ifdef ENABLE_PID_RANGE_FINDER
 		rangeFinder(ANALOG_OUTPUT_CHANNEL, ANALOG_CHANNEL_2_RANGE_FINDER),
 		sonarDriveControl(&jaguarFrontLeft, &jaguarRearLeft, &jaguarFrontRight, &jaguarRearRight),
 		rangePID(RANGE_PID_PROPORTION,RANGE_PID_INTEGRAL,RANGE_PID_DERIVATIVE, &rangeFinder, &sonarDriveControl),
-#endif		
 		compressor(DIGITAL_CHANNEL_1_INPUT_COMPRESSOR_SWITCH, RELAY_CHANNEL_1_COMPRESSOR_RELAY),
 		timeInState(),
 		timeSinceBoot()
@@ -268,19 +265,16 @@ public:
 		m_autoPeriodicLoops = 0;
 		m_disabledPeriodicLoops = 0;
 		m_telePeriodicLoops = 0;
-#ifdef ENABLE_PID_ROTATION
 		rotationPID.SetInputRange(ROTATION_PID_MIN_INPUT,ROTATION_PID_MAX_INPUT);
 		rotationPID.SetOutputRange(ROTATION_PID_MIN_OUTPUT,ROTATION_PID_MAX_OUTPUT);
-		rotationPID.SetTolerance(ROTATION_PID_TOLERENCE);
+		rotationPID.SetTolerance(ROTATION_PID_TOLERENCE_FIRST);
 		rotationPID.Disable();
-#endif
-#ifdef ENABLE_PID_RANGE_FINDER
+		
 		rangePID.SetInputRange(RANGE_PID_MIN_INPUT,RANGE_PID_MAX_INPUT);
 		rangePID.SetOutputRange(RANGE_PID_MIN_OUTPUT, RANGE_PID_MAX_OUTPUT);
 		rangePID.SetSetpoint(RANGE_PID_SETPOINT);
 		rangePID.SetTolerance(RANGE_PID_TOLERENCE);
 		rangePID.Disable();
-#endif
 		printf("Robot2012 Constructor Completed\n");
 	}
 	
@@ -334,7 +328,7 @@ public:
 	void AutonomousPeriodic(void) 
 	{
 		m_autoPeriodicLoops++;
-
+        myRobot.TankDrive(kinectLeft.GetY()*.33, kinectRight.GetY()*.33);
 	}
 
 	
@@ -346,12 +340,8 @@ public:
 		if (!BUTTON_CAMERA_ALIGN_SHOT_BUTTON())
 		{
 			anglesComputed = false;
-#ifdef ENABLE_PID_ROTATION
 			DISABLE_PID(rotationPID);
-#endif
-#ifdef ENABLE_PID_RANGE_FINDER
 			DISABLE_PID(rangePID);
-#endif
 			myRobot.TankDrive(stickLeftDrive,stickRightDrive);	
 			//myRobot.SetSafetyEnabled(true);
 			myRobot.SetSafetyEnabled(false);
@@ -360,25 +350,13 @@ public:
 		CameraInitialize();
 
 		
-		ManageAppendages();
-		ManageElevator();
-		ManageCatapult();
+		ManageAppendages(BUTTON_LOWER_BRIDGE_RAM(),BUTTON_DUMPER_RAMP_EXTEND());
+		ManageElevator(BUTTON_ELEVATOR_BOTTOM_UP(), BUTTON_ELEVATOR_BOTTOM_DOWN(), 
+						BUTTON_ELEVATOR_TOP_UP(), BUTTON_ELEVATOR_TOP_DOWN(), 
+						BUTTON_DUMPER_ROLLER(), THROTTLE_ELEVATORS());
+		ManageCatapult(BUTTON_CATAPULT_SHOOT(), BUTTON_CATAPULT_LATCH(), BUTTON_CATAPULT_FORCE_SHOOT());
 
-	#ifndef ENABLE_PID_ROTATION
-		AxisCamera &camera = AxisCamera::GetInstance("10.24.74.11");
-		if (camera.IsFreshImage())
-		{
-			ColorImage *colorImage = new ColorImage(IMAQ_IMAGE_HSL);
-			camera.GetImage(colorImage);
-			if (BUTTON_CAMERA_ALIGN_SHOT_BUTTON() && (anglesComputed == false))
-			{
-				gyroscope.Reset();
-				DetermineTargetPosition(colorImage);
-			}
-			delete colorImage;
-		}
-		#endif
-		PositionForTarget();
+		PositionForTarget(BUTTON_CAMERA_ALIGN_SHOT_BUTTON());
 		driverStationLCD->UpdateLCD();
 	}
 
@@ -396,13 +374,6 @@ public:
 	}
 	void TeleopContinuous(void) 
 	{
-	#ifndef ENABLE_PID_ROTATION
-		if ((BUTTON_CAMERA_ALIGN_SHOT_BUTTON()) && 
-			(anglesComputed == true))
-		{
-			RotateToTarget();
-		}
-	#endif
 	}
 
 	//returns 0 if a particle is found
@@ -435,10 +406,11 @@ public:
 		vector<ParticleAnalysisReport> *reports = binaryImage->GetOrderedParticleAnalysisReports();
 		ParticleAnalysisReport *topParticlePtr = NULL;
 		
-		for (int particleIndex = 0; ((particleIndex <  reports->size()) && (particleIndex < 5)); particleIndex++)
+		for (int particleIndex = 0; particleIndex < reports->size(); particleIndex++)
 		{
 			ParticleAnalysisReport &thisReport = reports->at(particleIndex);
-			if ((!topParticlePtr) || (thisReport.center_mass_y  < topParticlePtr->center_mass_y))
+			//TODO Validate the particle so we don't end up targeting a spec on the wall? (particle filter gets rid fo really small stuff, but we may want this if the arena is noisy)
+			if ((!topParticlePtr) || (thisReport.center_mass_y  < topParticlePtr->center_mass_y)  /*&& thisReport.particleQuality > WHATT!!!!*/)
 			{
 				topParticlePtr = &thisReport;
 			}
@@ -457,7 +429,6 @@ public:
 			driverStationLCD->UpdateLCD();
 			anglesComputed = true;
 
-#ifdef ENABLE_PID_ROTATION		
 			#ifdef PID_TUNING
 				static float tol_angle = ROTATION_PID_TOLERENCE;
 				static float set_angle = ROTATION_PID_SETPOINT_OFFSET;
@@ -480,7 +451,6 @@ public:
 			#else
 			rotationPID.SetSetpoint((-angleToTurn) + ROTATION_PID_SETPOINT_OFFSET);
 			#endif
-#endif
 		}	
 		else
 		{	
@@ -496,56 +466,8 @@ public:
 		return returnVal;
 	}
 	
-	void RotateToTarget(void)
-	{
-#ifndef ENABLE_PID_ROTATION
-		float angle_traveled = gyroscope.GetAngle() - angleAtImage;
-		float angle_remaining = angleToTurn - angle_traveled;
-		float angle_percent_remaining = angle_remaining / angleToTurn;
-		//turn left fast
-		if (angle_remaining < -13.0)
-		{
-			jaguarFrontLeft.Set(-(FAST_TURN * angle_percent_remaining));
-			jaguarFrontRight.Set(-(FAST_TURN * angle_percent_remaining));	
-			error Add the rear motors, dont fix the error until you have.;
-		}
-		//turn left slowly
-		else if (angle_remaining < -3.0)
-		{
-			jaguarFrontLeft.Set(-(SLOW_TURN * angle_percent_remaining));
-			jaguarFrontRight.Set(-(SLOW_TURN * angle_percent_remaining));
-		}
-		else if (angle_remaining < -0.5)
-		{
-			jaguarFrontLeft.Set(-(VERY_SLOW_TURN * angle_percent_remaining));
-			jaguarFrontRight.Set(-(VERY_SLOW_TURN * angle_percent_remaining));
-		}
-		//turn right fast
-		else if (angle_remaining > 13.0)
-		{
-			jaguarFrontLeft.Set((FAST_TURN * angle_percent_remaining));
-			jaguarFrontRight.Set((FAST_TURN * angle_percent_remaining));
-		}
-		//turn right slowly
-		else if (angle_remaining > 3.0)
-		{
-			jaguarFrontLeft.Set((SLOW_TURN * angle_percent_remaining));
-			jaguarFrontRight.Set((SLOW_TURN * angle_percent_remaining));
-		}
-		else if (angle_remaining > 0.5)
-		{
-			jaguarFrontLeft.Set((VERY_SLOW_TURN * angle_percent_remaining));
-			jaguarFrontRight.Set((VERY_SLOW_TURN * angle_percent_remaining));
-		}
-		else
-		{
-			jaguarFrontLeft.Set(0.0);
-			jaguarFrontRight.Set(0.0);
-		}
-#endif
-	}
 
-	void ManageAppendages(void)
+	void ManageAppendages(bool extend_bridge_ram, bool extend_dumper_ramp)
 	{
 		typedef enum
 		{
@@ -565,18 +487,18 @@ public:
 		case APPENDAGE_IDLE:
 			BRIDGE_RAM_EXTENDED(false);
 			DUMPER_RAMP_EXTENDED(false);
-			if (!BUTTON_LOWER_BRIDGE_RAM() && !BUTTON_DUMPER_RAMP_EXTEND())
+			if (!extend_bridge_ram && !extend_dumper_ramp)
 			{
 				trigger_released = true;
 			}
 			
-			if(trigger_released && BUTTON_LOWER_BRIDGE_RAM())
+			if(trigger_released && extend_bridge_ram)
 			{
 				trigger_released = false;
 				BRIDGE_RAM_EXTENDED(true);
 				appendage_state = APPENDAGE_BRIDGE_RAM_EXTENDED;
 			}
-			else if (trigger_released && BUTTON_DUMPER_RAMP_EXTEND())
+			else if (trigger_released && extend_dumper_ramp)
 			{
 				trigger_released = false;
 				DUMPER_RAMP_EXTENDED(true);
@@ -587,11 +509,11 @@ public:
 			BRIDGE_RAM_EXTENDED(true);
 			DUMPER_RAMP_EXTENDED(false);
 
-			if (!BUTTON_LOWER_BRIDGE_RAM())
+			if (!extend_bridge_ram)
 			{
 				trigger_released = true;
 			}
-			if (trigger_released && BUTTON_LOWER_BRIDGE_RAM())
+			if (trigger_released && extend_bridge_ram)
 			{
 				trigger_released = false;
 				BRIDGE_RAM_EXTENDED(false);
@@ -603,7 +525,7 @@ public:
 		case APPENDAGE_BRIDGE_RAM_RETRACTING:
 			BRIDGE_RAM_EXTENDED(false);
 			DUMPER_RAMP_EXTENDED(false);
-			if (!BUTTON_LOWER_BRIDGE_RAM())
+			if (!extend_bridge_ram)
 			{
 				trigger_released = true;
 			}
@@ -619,11 +541,11 @@ public:
 			BRIDGE_RAM_EXTENDED(false);
 			DUMPER_RAMP_EXTENDED(true);
 
-			if (!BUTTON_DUMPER_RAMP_EXTEND())
+			if (!extend_dumper_ramp)
 			{
 				trigger_released = true;
 			}
-			if (trigger_released && BUTTON_DUMPER_RAMP_EXTEND())
+			if (trigger_released && extend_dumper_ramp)
 			{
 				trigger_released = false;
 				BRIDGE_RAM_EXTENDED(false);
@@ -635,7 +557,7 @@ public:
 		case APPENDAGE_DUMPER_RAMP_RETRACTING:
 			BRIDGE_RAM_EXTENDED(false);
 			DUMPER_RAMP_EXTENDED(false);
-			if (!BUTTON_DUMPER_RAMP_EXTEND())
+			if (!extend_dumper_ramp)
 			{
 				trigger_released = true;
 			}
@@ -648,19 +570,18 @@ public:
 		}
 	}
 
-	void ManageElevator(void)
+	void ManageElevator(bool bottom_up, bool bottom_down, bool top_up, bool top_down, bool dumper_roller, float throttle)
 	{
-		float throttle = THROTTLE_ELEVATORS();
 		driverStationLCD->PrintfLine((DriverStationLCD::Line) 3, "Throttle: %f", throttle);
 		
 			
 		
-		if (BUTTON_ELEVATOR_BOTTOM_UP())
+		if (bottom_up)
 		{
 			jaguarElevatorBottom1.Set(-ELEVATOR_SPEED_BOTTOM, BOTTOM_ROLLERS_SYNC_GROUP);
 			jaguarElevatorBottom2.Set(-ELEVATOR_SPEED_BOTTOM, BOTTOM_ROLLERS_SYNC_GROUP);
 		}
-		else if (BUTTON_ELEVATOR_BOTTOM_DOWN())
+		else if (bottom_down)
 		{
 			jaguarElevatorBottom1.Set(ELEVATOR_SPEED_BOTTOM, BOTTOM_ROLLERS_SYNC_GROUP);
 			jaguarElevatorBottom2.Set(ELEVATOR_SPEED_BOTTOM, BOTTOM_ROLLERS_SYNC_GROUP);
@@ -671,11 +592,11 @@ public:
 			jaguarElevatorBottom2.Set(0.0);
 		}
 		
-		if (BUTTON_ELEVATOR_TOP_UP())
+		if (top_up)
 		{
 			jaguarElevatorTop.Set(ELEVATOR_SPEED_TOP);
 		}
-		else if (BUTTON_ELEVATOR_TOP_DOWN())
+		else if (top_down)
 		{
 			jaguarElevatorTop.Set(-ELEVATOR_SPEED_TOP);
 		}
@@ -684,7 +605,7 @@ public:
 			jaguarElevatorTop.Set(0.0);
 		}
 		
-		if (BUTTON_DUMPER_ROLLER())
+		if (dumper_roller)
 		{
 			victorDumperRoller.Set(throttle);
 		}
@@ -694,7 +615,7 @@ public:
 		}
 	}
 	
-	void ManageCatapult(void)
+	void ManageCatapult(bool catapult_shoot, bool catapult_latch, bool force_shoot)
 	{
 		typedef enum
 		{
@@ -708,15 +629,16 @@ public:
 		static CATAPULT_STATE catapult_state = CATAPULT_INITIAL;
 		static bool button_released = true;
 		static Timer state_timer;
-		state_timer.Start();
+		state_timer.Start();//Doesn't do anything unless it's not running
+		
 		switch (catapult_state)
 		{
 		case CATAPULT_INITIAL:
 			CATAPULT_LATCH_EXTENDED(false);
 			CATAPULT_PUSHER_EXTENDED(false);
-			if (!BUTTON_CATAPULT_SHOOT())button_released = true;
+			if (!catapult_shoot)button_released = true;
 			//TODO Make this use a timer instead
-			if (BUTTON_CATAPULT_SHOOT() && button_released)
+			if (catapult_shoot && button_released)
 			{
 				CATAPULT_PUSHER_EXTENDED(true);
 				catapult_state = CATAPULT_COCKING;
@@ -727,7 +649,7 @@ public:
 		case CATAPULT_COCKING:
 			CATAPULT_PUSHER_EXTENDED(true);
 			CATAPULT_LATCH_EXTENDED(false);
-			if (!BUTTON_CATAPULT_LATCH())button_released = true;
+			if (!catapult_latch)button_released = true;
 			if (state_timer.Get() >= 2.0);
 			{
 				state_timer.Reset();
@@ -737,8 +659,8 @@ public:
 		case CATAPULT_WAITING_LATCH:
 			CATAPULT_LATCH_EXTENDED(false);
 			CATAPULT_PUSHER_EXTENDED(true);
-			if (!BUTTON_CATAPULT_LATCH())button_released = true;
-			if (BUTTON_CATAPULT_LATCH() && button_released)
+			if (!catapult_latch)button_released = true;
+			if (catapult_latch && button_released)
 			{
 				CATAPULT_LATCH_EXTENDED(true);
 				//maybe switch solonoid?
@@ -750,12 +672,10 @@ public:
 		case CATAPULT_READY:
 			CATAPULT_PUSHER_EXTENDED(false);
 			CATAPULT_LATCH_EXTENDED(true);
-			if (!BUTTON_CATAPULT_SHOOT())button_released = true;
-			if (BUTTON_CATAPULT_SHOOT() && (state_timer.Get() > 0.2) && button_released)
+			if (!catapult_shoot)button_released = true;
+			if (catapult_shoot && (state_timer.Get() > 0.2) && button_released)
 			{
-				if ((BUTTON_CATAPULT_FORCE_SHOOT() == true) ||
-					((anglesComputed == true) && 
-					 (targetLocked == true))) 
+				if ((force_shoot == true) || (targetLocked == true)) 
 				{
 					CATAPULT_LATCH_EXTENDED(false);
 					state_timer.Reset();
@@ -766,7 +686,7 @@ public:
 		case CATAPULT_FIRING:
 			CATAPULT_PUSHER_EXTENDED(false);
 			CATAPULT_LATCH_EXTENDED(false);
-			if (!BUTTON_CATAPULT_SHOOT())button_released = true;
+			if (!catapult_shoot)button_released = true;
 			if (state_timer.Get() >= 1.0)
 			{
 				CATAPULT_PUSHER_EXTENDED(true);
@@ -776,15 +696,14 @@ public:
 		}
 	}
 
-	void PositionForTarget(void)
+	void PositionForTarget(bool camera_align_shot)
 	{
 		typedef enum
 		{
 			TARGETING_IDLE,
 			TARGETING_ROTATING,
 			TARGETING_DRIVING_TO_DISTANCE,
-			TARGETING_ROTATING_FINAL,
-			TARGETING_LOCKED
+			TARGETING_ROTATING_FINAL
 		}TARGETING_STATE;
 		
 		static TARGETING_STATE state_targeting = TARGETING_IDLE;
@@ -794,6 +713,7 @@ public:
 		driverStationLCD->UpdateLCD();
 		
 		static int on_target_count = 0;
+		Timer imageRefreshTimer;
 		AxisCamera &camera = AxisCamera::GetInstance("10.24.74.11");
 		switch (state_targeting)
 		{
@@ -804,13 +724,16 @@ public:
 			DISABLE_PID(rangePID);
 			if (camera.IsFreshImage())
 			{
-				if (BUTTON_CAMERA_ALIGN_SHOT_BUTTON() && (anglesComputed == false))
+				if (camera_align_shot && (anglesComputed == false))
 				{
 					ColorImage *colorImage = new ColorImage(IMAQ_IMAGE_HSL);
 					camera.GetImage(colorImage);
+					imageRefreshTimer.Reset();
+					imageRefreshTimer.Start();
 					gyroscope.Reset();
 					if (DetermineTargetPosition(colorImage) == 0)
 					{
+						rotationPID.SetTolerance(ROTATION_PID_TOLERENCE_FIRST);
 						rotationPID.Enable();
 						state_targeting = TARGETING_ROTATING;
 						on_target_count = 0;
@@ -820,26 +743,17 @@ public:
 			}
 			break;
 		case TARGETING_ROTATING:
-		case TARGETING_ROTATING_FINAL:
-			if (BUTTON_CAMERA_ALIGN_SHOT_BUTTON() == false)
+			if (camera_align_shot == false)
 			{
 				DISABLE_PID(rotationPID);
 				state_targeting = TARGETING_IDLE;
 				on_target_count = 0;
 			}
-			else if (rotationPID.OnTarget() && (on_target_count > 10))
+			else if (rotationPID.OnTarget() && (on_target_count > 3))
 			{
 				DISABLE_PID(rotationPID);
-				if (state_targeting == TARGETING_ROTATING)
-				{
-					rangePID.Enable();
-					state_targeting = TARGETING_DRIVING_TO_DISTANCE;
-				}
-				else
-				{
-					state_targeting = TARGETING_LOCKED;
-					targetLocked = true;
-				}
+				rangePID.Enable();
+				state_targeting = TARGETING_DRIVING_TO_DISTANCE;
 				on_target_count = 0;
 			}
 			else if (rotationPID.OnTarget())
@@ -854,16 +768,17 @@ public:
 			}
 			break;
 		case TARGETING_DRIVING_TO_DISTANCE:
-			if (BUTTON_CAMERA_ALIGN_SHOT_BUTTON() == false)
+			if (camera_align_shot == false)
 			{
 				DISABLE_PID(rangePID);
 				state_targeting = TARGETING_IDLE;
 				on_target_count = 0;
 			}
-			else if (rangePID.OnTarget() && (on_target_count > 20))
+			else if (rangePID.OnTarget() && (on_target_count > 8))
 			{
 				DISABLE_PID(rangePID);
 				state_targeting = TARGETING_ROTATING_FINAL;
+				rotationPID.SetTolerance(ROTATION_PID_TOLERENCE_LAST);
 				on_target_count = 0;
 			}
 			else if (rangePID.OnTarget())
@@ -877,17 +792,45 @@ public:
 				on_target_count = 0;
 			}
 			break;
-		case TARGETING_LOCKED:
-
-			DISABLE_PID(rotationPID);
-			DISABLE_PID(rangePID);
-			targetLocked = true;
-
-			if (BUTTON_CAMERA_ALIGN_SHOT_BUTTON() == false)
+		case TARGETING_ROTATING_FINAL:
+			
+			if (camera.IsFreshImage() && camera_align_shot && (imageRefreshTimer.HasPeriodPassed(1.0)))
 			{
+				ColorImage *colorImage = new ColorImage(IMAQ_IMAGE_HSL);
+				camera.GetImage(colorImage);
+				imageRefreshTimer.Reset();
+				imageRefreshTimer.Start();
+				if (DetermineTargetPosition(colorImage) == 0)
+				{
+					gyroscope.Reset();
+				}
+				delete colorImage;
+			}
+			DISABLE_PID(rangePID);
+			if (camera_align_shot == false)
+			{
+				DISABLE_PID(rotationPID);
 				state_targeting = TARGETING_IDLE;
 				targetLocked = false;
+				on_target_count = 0;
 			}
+			else if (rotationPID.OnTarget() && (on_target_count > 3))
+			{
+				targetLocked = true;
+				rotationPID.Enable();
+			}
+			else if (rotationPID.OnTarget())
+			{
+				rotationPID.Enable();
+				on_target_count++;
+			}
+			else
+			{
+				rotationPID.Enable();
+				targetLocked = false;
+				on_target_count = 0;
+			}
+
 			break;
 			
 		}
