@@ -30,17 +30,17 @@
 
 
 
-#define HALF_VERTICAL_FIELD_OF_VIEW 19.13711F
-#define TANGENT_OF_HALF_VERTICAL_FIELD_OF_VIEW .347007F
 
 #define HALF_HORIZONTAL_FIELD_OF_VIEW 24.40828F
-#define TARGET_HEIGHT_IN_FEET 1.5F
-#define IMAGE_HEIGHT_IN_PIXELS 240
-
-
-#define IMAGE_HEIGHT_IN_FEET(target_height_pxls) ((TARGET_HEIGHT_IN_FEET * (IMAGE_HEIGHT_IN_PIXELS / 2)) / target_height_pxls)
-#define CALCULATE_DISTANCE(target_height_pxls) (IMAGE_HEIGHT_IN_FEET(target_height_pxls)/TANGENT_OF_HALF_VERTICAL_FIELD_OF_VIEW)
 #define HORIZONTAL_DEGREES_PER_PIXEL (HALF_HORIZONTAL_FIELD_OF_VIEW/CENTER_OF_IMAGE)
+
+
+//#define HALF_VERTICAL_FIELD_OF_VIEW 19.13711F
+//#define TANGENT_OF_HALF_VERTICAL_FIELD_OF_VIEW .347007F
+//#define TARGET_HEIGHT_IN_FEET 1.5F
+//#define IMAGE_HEIGHT_IN_PIXELS 240
+//#define IMAGE_HEIGHT_IN_FEET(target_height_pxls) ((TARGET_HEIGHT_IN_FEET * (IMAGE_HEIGHT_IN_PIXELS / 2)) / target_height_pxls)
+//#define CALCULATE_DISTANCE(target_height_pxls) (IMAGE_HEIGHT_IN_FEET(target_height_pxls)/TANGENT_OF_HALF_VERTICAL_FIELD_OF_VIEW)
 
 
 //Controls defines - for new buttons, add a #define here and use it to get the key you want, that way we can change controls easily
@@ -197,6 +197,7 @@ class Robot2012 : public IterativeRobot
 
 	Timer timeInState;
 	Timer timeSinceBoot;
+	Timer autonomousTempTimer;
 	
 	DriverStation *driverStation;
 	DriverStationLCD *driverStationLCD;
@@ -210,10 +211,20 @@ class Robot2012 : public IterativeRobot
 	bool cameraInitialized;
 	float angleToTurn;
 	float angleAtImage;
-	bool anglesComputed;
-	int testCount;
 	float distanceToTarget;
 	bool targetLocked;
+	int autonomousShotsFired;
+	typedef enum 
+	{
+		AUTONOMOUS_LINING_UP_SHOT,
+		AUTONOMOUS_SHOOTING_FIRST_SHOT,
+		AUTONOMOUS_REARMING_FIRST_SHOT,
+		AUTONOMOUS_RELOADING,
+		AUTONOMOUS_SHOOTING_SECOND_SHOT,
+		AUTONOMOUS_DONE_SHOOTING
+	}AUTONOMOUS_STATE;
+	
+	AUTONOMOUS_STATE autonomousState;
 		
 public:
 
@@ -242,10 +253,10 @@ public:
 		kinectRight(2),
 		gyroscope(ANALOG_OUTPUT_CHANNEL, ANALOG_CHANNEL_1_GYROSCOPE),
 		//TODO pass in myRobot instead of all the jags and update the PIDs
-		rotationControl(&jaguarFrontLeft, &jaguarRearLeft, &jaguarFrontRight, &jaguarRearRight),
+		rotationControl(&myRobot),
 		rotationPID(ROTATION_PID_PROPORTION, ROTATION_PID_INTEGRAL, ROTATION_PID_DERIVATIVE, &gyroscope, &rotationControl),
 		rangeFinder(ANALOG_OUTPUT_CHANNEL, ANALOG_CHANNEL_2_RANGE_FINDER),
-		sonarDriveControl(&jaguarFrontLeft, &jaguarRearLeft, &jaguarFrontRight, &jaguarRearRight),
+		sonarDriveControl(&myRobot),
 		rangePID(RANGE_PID_PROPORTION,RANGE_PID_INTEGRAL,RANGE_PID_DERIVATIVE, &rangeFinder, &sonarDriveControl),
 		compressor(DIGITAL_CHANNEL_1_INPUT_COMPRESSOR_SWITCH, RELAY_CHANNEL_1_COMPRESSOR_RELAY),
 		timeInState(),
@@ -275,6 +286,7 @@ public:
 		rangePID.SetSetpoint(RANGE_PID_SETPOINT);
 		rangePID.SetTolerance(RANGE_PID_TOLERENCE);
 		rangePID.Disable();
+		
 		printf("Robot2012 Constructor Completed\n");
 	}
 	
@@ -306,7 +318,9 @@ public:
 		timeInState.Start();
 		compressor.Start();
 		m_autoPeriodicLoops = 0;				// Reset the loop counter for autonomous mode
-		anglesComputed = false;
+		autonomousState = AUTONOMOUS_LINING_UP_SHOT;
+		autonomousTempTimer.Reset();
+		autonomousTempTimer.Start();
 	}
 
 	void TeleopInit(void) 
@@ -315,7 +329,6 @@ public:
 		timeInState.Reset();
 		timeInState.Start();
 		compressor.Start();
-		anglesComputed = false;
 	}
 
 	/********************************** Periodic Routines *************************************/
@@ -328,7 +341,131 @@ public:
 	void AutonomousPeriodic(void) 
 	{
 		m_autoPeriodicLoops++;
-        myRobot.TankDrive(kinectLeft.GetY()*.33, kinectRight.GetY()*.33);
+		static bool useKinect = false;
+		static Kinect *kinect = Kinect::GetInstance();
+
+		CameraInitialize();
+		
+		//if there is a kinect present, and it sees somebody, use the kinect from here on in
+		if (kinect != (void *) 0)
+		{
+			if (kinect->GetNumberOfPlayers() != 0)
+			{
+				useKinect = true;
+			}
+		}
+
+
+		
+		//if the kinect isnt being used or the kinect autoshoot button is button is being pressed, and we haven't finished shooting
+		if (((useKinect == false) || (0)) && (autonomousState != AUTONOMOUS_DONE_SHOOTING))
+		{
+			autonomousTempTimer.Start(); //we call this to make sure the timer stays running whenever we are autoshooting.
+			
+			//Depending on the current autonomousState, we run one of the following cases (this is called a switch case statement)
+			switch (autonomousState)
+			{
+			case AUTONOMOUS_LINING_UP_SHOT:
+				//in this state set all the managers to off accept the targeter
+
+				ManageAppendages(false,false);
+				ManageElevator(false,false,false,false,false,0.5);
+				ManageCatapult(false, false, false);
+				//if you hover over the function name (ie ManageAppendages) you can see what parameters it takes, and determine what they do by their name
+				PositionForTarget(true);
+				
+				
+				//if targetLocked or autonTempTimer > 5sec goto the next state
+				if ((targetLocked == true) || (autonomousTempTimer.Get() > 5.0))
+				{
+					autonomousTempTimer.Reset();
+					autonomousState = AUTONOMOUS_SHOOTING_FIRST_SHOT;
+				}
+				break;
+			case AUTONOMOUS_SHOOTING_FIRST_SHOT:
+				ManageAppendages(false,false);
+				ManageElevator(false,false,false,false,false,0.5);
+				PositionForTarget(true);
+				//if target_locked is true (or time > 1.0) push the catapult fire (and force_shoot) and reset the autonomousTempTimer
+				if ((targetLocked == true) || (autonomousTempTimer.Get() > 1.0))
+				{
+					ManageCatapult(true, false, true);
+					autonomousTempTimer.Reset();
+					autonomousState = AUTONOMOUS_REARMING_FIRST_SHOT;
+				}
+				else
+				{
+					ManageCatapult(false, false, false);
+				}
+				
+				break;
+			case AUTONOMOUS_REARMING_FIRST_SHOT:
+				//then let go of the latch button and wait 2 second before going to AUTONOMOUS_RELOADING
+				ManageAppendages(false,false);
+				ManageElevator(false,false,false,false,false,0.5);
+				PositionForTarget(true);
+				ManageCatapult(false, false, false);
+				if (autonomousTempTimer.Get() > 2.0)
+				{
+					autonomousTempTimer.Reset();
+					autonomousState = AUTONOMOUS_RELOADING;
+				}
+				break;
+			case AUTONOMOUS_RELOADING:
+				ManageAppendages(false,false);
+				ManageElevator(false,false,false,true,false,0.5);
+				PositionForTarget(true);
+				ManageCatapult(false, true, false);
+				if (autonomousTempTimer.Get()> 4.0)
+				{
+					ManageCatapult(false, false, false);
+					autonomousTempTimer.Reset();
+					autonomousState = AUTONOMOUS_SHOOTING_SECOND_SHOT;
+				}
+				//push the latch button to lock the arm in place and retract the pusher
+				//turn on the top elevator (downward) for 4 seconds to reload the ball
+				break;
+			case AUTONOMOUS_SHOOTING_SECOND_SHOT:
+				ManageAppendages(false,false);
+				ManageElevator(false,false,false,true,false,0.5);
+				PositionForTarget(true);
+				//if target_locked is true (or time > 1.0) push the catapult fire (and force_shoot) and wait 2 second before going to AUTONOMOUS_DONE_SHOOTING
+				if ((targetLocked == true) || (autonomousTempTimer.Get() > 1.0))
+				{
+					ManageCatapult(true, false, true);
+					autonomousTempTimer.Reset();
+					autonomousState = AUTONOMOUS_DONE_SHOOTING;
+				}
+				else
+				{
+					ManageCatapult(false, false, false);
+				}
+				break;
+				
+			default:
+			case AUTONOMOUS_DONE_SHOOTING:
+				ManageAppendages(false,false);
+				ManageElevator(false,false,false,false,false,0.5);
+				PositionForTarget(true);
+				ManageCatapult(false, false, false);
+				break;
+			}
+		}
+		else
+		{
+			//if the kinect autoshoot button is no longer being pressed or we were already done shooting
+			if ((autonomousState != AUTONOMOUS_DONE_SHOOTING) || (0))
+			autonomousState = AUTONOMOUS_LINING_UP_SHOT; //reset the autonomous state if the kinect takes control;
+			autonomousTempTimer.Stop();
+			autonomousTempTimer.Reset();
+			myRobot.TankDrive(kinectLeft.GetY()*.33, kinectRight.GetY()*.33);
+			//add code to bind each kinectStick button to each action we want to be able to do in autonomous
+			
+			
+		}
+		
+		
+		
 	}
 
 	
@@ -339,13 +476,11 @@ public:
 		
 		if (!BUTTON_CAMERA_ALIGN_SHOT_BUTTON())
 		{
-			anglesComputed = false;
 			DISABLE_PID(rotationPID);
 			DISABLE_PID(rangePID);
 			myRobot.TankDrive(stickLeftDrive,stickRightDrive);	
 			//myRobot.SetSafetyEnabled(true);
 			myRobot.SetSafetyEnabled(false);
-			testCount = 0;
 		}
 		CameraInitialize();
 
@@ -422,12 +557,11 @@ public:
 			
 			angleToTurn = (centerOfMassX - CENTER_OF_IMAGE) * HORIZONTAL_DEGREES_PER_PIXEL;
 			
-			distanceToTarget = CALCULATE_DISTANCE(topParticlePtr->boundingRect.height);
+			//distanceToTarget = CALCULATE_DISTANCE(topParticlePtr->boundingRect.height);
 
 			driverStationLCD->PrintfLine((DriverStationLCD::Line) 0, "Angle to turn: %.5f", -angleToTurn);
 			//driverStationLCD->PrintfLine((DriverStationLCD::Line) 1, "Distance: %.5f", distanceToTarget);
 			driverStationLCD->UpdateLCD();
-			anglesComputed = true;
 
 			#ifdef PID_TUNING
 				static float tol_angle = ROTATION_PID_TOLERENCE;
@@ -458,7 +592,6 @@ public:
 			jaguarFrontRight.Set(0.0);
 			jaguarRearLeft.Set(0.0);
 			jaguarRearRight.Set(0.0);
-			anglesComputed = false;
 		}
 		delete reports;
 		delete binaryImage;
@@ -619,33 +752,33 @@ public:
 	{
 		typedef enum
 		{
-			CATAPULT_INITIAL,
+//			CATAPULT_INITIAL,
 			CATAPULT_COCKING,
 			CATAPULT_WAITING_LATCH,
 			CATAPULT_READY,
 			CATAPULT_FIRING
 		}CATAPULT_STATE;
 		
-		static CATAPULT_STATE catapult_state = CATAPULT_INITIAL;
+		static CATAPULT_STATE catapult_state = CATAPULT_READY;
 		static bool button_released = true;
 		static Timer state_timer;
 		state_timer.Start();//Doesn't do anything unless it's not running
 		
 		switch (catapult_state)
 		{
-		case CATAPULT_INITIAL:
-			CATAPULT_LATCH_EXTENDED(false);
-			CATAPULT_PUSHER_EXTENDED(false);
-			if (!catapult_shoot)button_released = true;
-			//TODO Make this use a timer instead
-			if (catapult_shoot && button_released)
-			{
-				CATAPULT_PUSHER_EXTENDED(true);
-				catapult_state = CATAPULT_COCKING;
-				state_timer.Reset();
-				button_released = false;
-			}
-			break;
+//		case CATAPULT_INITIAL:
+//			CATAPULT_LATCH_EXTENDED(true);
+//			CATAPULT_PUSHER_EXTENDED(false);
+//			if (!catapult_shoot)button_released = true;
+//			//TODO Make this use a timer instead
+//			if (catapult_shoot && button_released)
+//			{
+//				CATAPULT_PUSHER_EXTENDED(true);
+//				catapult_state = CATAPULT_COCKING;
+//				state_timer.Reset();
+//				button_released = false;
+//			}
+//			break;
 		case CATAPULT_COCKING:
 			CATAPULT_PUSHER_EXTENDED(true);
 			CATAPULT_LATCH_EXTENDED(false);
@@ -724,7 +857,7 @@ public:
 			DISABLE_PID(rangePID);
 			if (camera.IsFreshImage())
 			{
-				if (camera_align_shot && (anglesComputed == false))
+				if (camera_align_shot == true)
 				{
 					ColorImage *colorImage = new ColorImage(IMAQ_IMAGE_HSL);
 					camera.GetImage(colorImage);
