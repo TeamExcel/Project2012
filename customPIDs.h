@@ -2,31 +2,25 @@
 #define CUSTOMPIDS_H
 
 #include "PIDOutput.h"
-#include "Jaguar.h"
+#include "RobotDrive.h"
 
 #define ENABLE_PID_ROTATION
 #define ENABLE_PID_RANGE_FINDER
 class GyroControlledTurning: public PIDOutput
 {
 private:
-	Jaguar *jaguarFrontLeft;
-	Jaguar *jaguarRearLeft;
-	Jaguar *jaguarFrontRight;
-	Jaguar *jaguarRearRight;
+	RobotDrive *theRobot;
 public:
-	GyroControlledTurning(Jaguar *frontLeft, Jaguar *rearLeft, Jaguar *frontRight, Jaguar *rearRight);
+	GyroControlledTurning(RobotDrive *controlledRobot);
 	void PIDWrite(float output);
 };
 
 class SonarControlledDriving: public PIDOutput
 {
 private:
-	Jaguar *jaguarFrontLeft;
-	Jaguar *jaguarRearLeft;
-	Jaguar *jaguarFrontRight;
-	Jaguar *jaguarRearRight;
+	RobotDrive *theRobot;
 public:
-	SonarControlledDriving(Jaguar *frontLeft, Jaguar *rearLeft, Jaguar *frontRight, Jaguar *rearRight);
+	SonarControlledDriving(RobotDrive *controlledRobot);
 	void PIDWrite(float output);
 };
 

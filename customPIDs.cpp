@@ -1,51 +1,28 @@
 #include "customPIDs.h"
+#include "DriverStationLCD.h"
 
 
-GyroControlledTurning::GyroControlledTurning(Jaguar *frontLeft, Jaguar *rearLeft, Jaguar *frontRight, Jaguar *rearRight)
+GyroControlledTurning::GyroControlledTurning(RobotDrive *controlledRobot)
 {
-	jaguarFrontLeft = frontLeft;
-	jaguarRearLeft = rearLeft;
-	jaguarFrontRight = frontRight;
-	jaguarRearRight = rearRight;
+	theRobot = controlledRobot;
 }
 
-#include "DriverStationLCD.h"
 void GyroControlledTurning::PIDWrite(float output)
 {
-	output = -output;
-	#ifdef ENABLE_PID_ROTATION
-	if (jaguarFrontLeft)
-		jaguarFrontLeft->Set(output);
-	if (jaguarRearLeft)
-		jaguarRearLeft->Set(output);
-	if (jaguarFrontRight)
-		jaguarFrontRight->Set(output);
-	if (jaguarRearRight)
-		jaguarRearRight->Set(output);
-	#endif
+	if (theRobot)
+		theRobot->TankDrive(-output, -output);
 }
 
 
-SonarControlledDriving::SonarControlledDriving(Jaguar *frontLeft, Jaguar *rearLeft, Jaguar *frontRight, Jaguar *rearRight)
+SonarControlledDriving::SonarControlledDriving(RobotDrive *controlledRobot)
 {
-	jaguarFrontLeft = frontLeft;
-	jaguarRearLeft = rearLeft;
-	jaguarFrontRight = frontRight;
-	jaguarRearRight = rearRight;
+	theRobot = controlledRobot;
 }
 
 void SonarControlledDriving::PIDWrite(float output)
 {
 	DriverStationLCD *driverStationLCD = DriverStationLCD::GetInstance();
 	driverStationLCD->PrintfLine((DriverStationLCD::Line) 2, "PID Output: %f", output);
-	#ifdef ENABLE_PID_ROTATION
-	if (jaguarFrontLeft)
-		jaguarFrontLeft->Set(output);
-	if (jaguarRearLeft)
-		jaguarRearLeft->Set(output);
-	if (jaguarFrontRight)
-		jaguarFrontRight->Set(-output);
-	if (jaguarRearRight)
-		jaguarRearRight->Set(-output);
-	#endif
+	if (theRobot)
+		theRobot->TankDrive(output, -output);
 }
