@@ -266,7 +266,6 @@ public:
 		kinectLeft(1),
 		kinectRight(2),
 		gyroscope(ANALOG_OUTPUT_CHANNEL, ANALOG_CHANNEL_1_GYROSCOPE),
-		//TODO pass in myRobot instead of all the jags and update the PIDs
 		rotationControl(&myRobot),
 		rotationPID(ROTATION_PID_PROPORTION, ROTATION_PID_INTEGRAL, ROTATION_PID_DERIVATIVE, &gyroscope, &rotationControl),
 		rangeFinder(ANALOG_OUTPUT_CHANNEL, ANALOG_CHANNEL_2_RANGE_FINDER),
@@ -463,19 +462,29 @@ public:
 				}
 				break;
 			case AUTONOMOUS_HITTING_BRIDGE:
-				ManageAppendages(true,false);
+				//ManageAppendages(true,false); //this complicates it more than neccessary, just control the bridge ram manually
+				BRIDGE_RAM_EXTENDED(true);
 				ManageElevator(true,false,false,false,false,0.5);
 				PositionForTarget(false);
 				ManageCatapult(false, false, false);
 				myRobot.TankDrive(.75,.75);
-				if (autonomousTempTimer.Get() > 1.0)
+				if (autonomousTempTimer.Get() > 2.0)
 				{
+					autonomousTempTimer.Reset();
 					myRobot.TankDrive(0.0,0.0);
 					autonomousState = AUTONOMOUS_WAIT_FOR_TELEOP;
 				}
 				break;
 			case AUTONOMOUS_WAIT_FOR_TELEOP:
-				ManageAppendages(false,false);
+				//ManageAppendages(false,false);
+				if (autonomousTempTimer.Get() < 2.0)
+				{
+					BRIDGE_RAM_EXTENDED(true);
+				}
+				else
+				{
+					BRIDGE_RAM_EXTENDED(false);
+				}
 				ManageElevator(true,false,false,false,false,0.5);
 				PositionForTarget(false);
 				ManageCatapult(false, false, false);
@@ -499,10 +508,11 @@ public:
 			}
 			autonomousTempTimer.Stop();
 			autonomousTempTimer.Reset();
-			myRobot.TankDrive(kinectLeft.GetY()*.33, kinectRight.GetY()*.33);
+			myRobot.TankDrive(kinectLeft.GetY() * 0.7, kinectRight.GetY() * 0.7);
 			//add code to bind each kinectStick button to each action we want to be able to do in autonomous
-			ManageAppendages(KINECT_RIGHT_LEG_BACK(),false);
-			ManageElevator(KINECT_LEFT_LEG_FORWARD(),KINECT_LEFT_LEG_BACK(),KINECT_LEFT_LEG_FORWARD(),KINECT_LEFT_LEG_BACK(),KINECT_LEFT_LEG_FORWARD(),0.5);
+			//ManageAppendages(KINECT_RIGHT_LEG_BACK(),false);
+			BRIDGE_RAM_EXTENDED(KINECT_RIGHT_LEG_BACK());
+			ManageElevator(KINECT_LEFT_LEG_FORWARD(),KINECT_LEFT_LEG_BACK(),KINECT_LEFT_LEG_FORWARD(),KINECT_LEFT_LEG_BACK(),KINECT_LEFT_LEG_FORWARD(),0.8);
 			PositionForTarget(false);
 			ManageCatapult(false, false, false);
 			
