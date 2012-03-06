@@ -62,6 +62,18 @@
 
 #define BUTTON_LOWER_BRIDGE_RAM() stickLeftDrive.GetTop()
 
+//Kinect defines
+#define KINECT_HEAD_RIGHT() kinectLeft.GetRawButton(1)
+#define KINECT_HEAD_LEFT() kinectLeft.GetRawButton(2)
+#define KINECT_RIGHT_LEG_RIGHT() kinectLeft.GetRawButton(3)
+#define KINECT_LEFT_LEG_LEFT()kinectLeft.GetRawButton(4)
+#define KINECT_RIGHT_LEG_FORWARD()kinectLeft.GetRawButton(5)
+#define KINECT_RIGHT_LEG_BACK()kinectLeft.GetRawButton(6)
+#define KINECT_LEFT_LEG_FORWARD()kinectLeft.GetRawButton(7)
+#define KINECT_LEFT_LEG_BACK()kinectLeft.GetRawButton(8)
+
+
+
 
 //PID Parameters
 #define ROTATION_PID_PROPORTION 0.12
@@ -221,7 +233,9 @@ class Robot2012 : public IterativeRobot
 		AUTONOMOUS_REARMING_FIRST_SHOT,
 		AUTONOMOUS_RELOADING,
 		AUTONOMOUS_SHOOTING_SECOND_SHOT,
-		AUTONOMOUS_DONE_SHOOTING
+		AUTONOMOUS_HITTING_BRIDGE,
+		AUTONOMOUS_WAIT_FOR_TELEOP,
+		AUTONOMOUS_DONE
 	}AUTONOMOUS_STATE;
 	
 	AUTONOMOUS_STATE autonomousState;
@@ -358,7 +372,7 @@ public:
 
 		
 		//if the kinect isnt being used or the kinect autoshoot button is button is being pressed, and we haven't finished shooting
-		if (((useKinect == false) || (0)) && (autonomousState != AUTONOMOUS_DONE_SHOOTING))
+		if (((useKinect == false) || (KINECT_RIGHT_LEG_FORWARD())) && (autonomousState != AUTONOMOUS_DONE))
 		{
 			autonomousTempTimer.Start(); //we call this to make sure the timer stays running whenever we are autoshooting.
 			
@@ -429,21 +443,46 @@ public:
 				ManageAppendages(false,false);
 				ManageElevator(false,false,false,true,false,0.5);
 				PositionForTarget(true);
-				//if target_locked is true (or time > 1.0) push the catapult fire (and force_shoot) and wait 2 second before going to AUTONOMOUS_DONE_SHOOTING
+				//if target_locked is true (or time > 1.0) push the catapult fire (and force_shoot) and wait 2 second before going to AUTONOMOUS_DONE
 				if ((targetLocked == true) || (autonomousTempTimer.Get() > 1.0))
 				{
 					ManageCatapult(true, false, true);
 					autonomousTempTimer.Reset();
-					autonomousState = AUTONOMOUS_DONE_SHOOTING;
+					if (useKinect == true)
+					{
+						autonomousState = AUTONOMOUS_DONE;
+					}
+					else
+					{
+						autonomousState = AUTONOMOUS_HITTING_BRIDGE;
+					}
 				}
 				else
 				{
 					ManageCatapult(false, false, false);
 				}
 				break;
-				
+			case AUTONOMOUS_HITTING_BRIDGE:
+				ManageAppendages(true,false);
+				ManageElevator(true,false,false,false,false,0.5);
+				PositionForTarget(false);
+				ManageCatapult(false, false, false);
+				myRobot.TankDrive(.75,.75);
+				if (autonomousTempTimer.Get() > 1.0)
+				{
+					myRobot.TankDrive(0.0,0.0);
+					autonomousState = AUTONOMOUS_WAIT_FOR_TELEOP;
+				}
+				break;
+			case AUTONOMOUS_WAIT_FOR_TELEOP:
+				ManageAppendages(false,false);
+				ManageElevator(true,false,false,false,false,0.5);
+				PositionForTarget(false);
+				ManageCatapult(false, false, false);
+				myRobot.TankDrive(0.0,0.0);
+				break;
 			default:
-			case AUTONOMOUS_DONE_SHOOTING:
+			case AUTONOMOUS_DONE:
 				ManageAppendages(false,false);
 				ManageElevator(false,false,false,false,false,0.5);
 				PositionForTarget(true);
@@ -454,13 +493,18 @@ public:
 		else
 		{
 			//if the kinect autoshoot button is no longer being pressed or we were already done shooting
-			if ((autonomousState != AUTONOMOUS_DONE_SHOOTING) || (0))
-			autonomousState = AUTONOMOUS_LINING_UP_SHOT; //reset the autonomous state if the kinect takes control;
+			if ((autonomousState != AUTONOMOUS_DONE) || (KINECT_RIGHT_LEG_FORWARD()==false))
+			{
+				autonomousState = AUTONOMOUS_LINING_UP_SHOT; //reset the autonomous state if the kinect takes control;
+			}
 			autonomousTempTimer.Stop();
 			autonomousTempTimer.Reset();
 			myRobot.TankDrive(kinectLeft.GetY()*.33, kinectRight.GetY()*.33);
 			//add code to bind each kinectStick button to each action we want to be able to do in autonomous
-			
+			ManageAppendages(KINECT_RIGHT_LEG_BACK(),false);
+			ManageElevator(KINECT_LEFT_LEG_FORWARD(),KINECT_LEFT_LEG_BACK(),KINECT_LEFT_LEG_FORWARD(),KINECT_LEFT_LEG_BACK(),KINECT_LEFT_LEG_FORWARD(),0.5);
+			PositionForTarget(false);
+			ManageCatapult(false, false, false);
 			
 		}
 		
