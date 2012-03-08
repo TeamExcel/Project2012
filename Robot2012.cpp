@@ -66,28 +66,28 @@
 #define KINECT_HEAD_RIGHT() kinectLeft.GetRawButton(1)
 #define KINECT_HEAD_LEFT() kinectLeft.GetRawButton(2)
 #define KINECT_RIGHT_LEG_RIGHT() kinectLeft.GetRawButton(3)
-#define KINECT_LEFT_LEG_LEFT()kinectLeft.GetRawButton(4)
-#define KINECT_RIGHT_LEG_FORWARD()kinectLeft.GetRawButton(5)
-#define KINECT_RIGHT_LEG_BACK()kinectLeft.GetRawButton(6)
-#define KINECT_LEFT_LEG_FORWARD()kinectLeft.GetRawButton(7)
-#define KINECT_LEFT_LEG_BACK()kinectLeft.GetRawButton(8)
+#define KINECT_LEFT_LEG_LEFT() kinectLeft.GetRawButton(4)
+#define KINECT_RIGHT_LEG_FORWARD() kinectLeft.GetRawButton(5)
+#define KINECT_RIGHT_LEG_BACK() kinectLeft.GetRawButton(6)
+#define KINECT_LEFT_LEG_FORWARD() kinectLeft.GetRawButton(7)
+#define KINECT_LEFT_LEG_BACK() kinectLeft.GetRawButton(8)
 
 
 
 
 //PID Parameters
-#define ROTATION_PID_PROPORTION 0.12
-#define ROTATION_PID_INTEGRAL 0.01
-#define ROTATION_PID_DERIVATIVE 0.02
+#define ROTATION_PID_PROPORTION 0.18
+#define ROTATION_PID_INTEGRAL 0.02
+#define ROTATION_PID_DERIVATIVE 0.07
 
 #define ROTATION_PID_MIN_INPUT -30.0
 #define ROTATION_PID_MAX_INPUT 30.0
-#define ROTATION_PID_MIN_OUTPUT -0.50
-#define ROTATION_PID_MAX_OUTPUT 0.50
+#define ROTATION_PID_MIN_OUTPUT -1.00
+#define ROTATION_PID_MAX_OUTPUT 1.00
 
 #define ROTATION_PID_TOLERENCE_FIRST 2.50
 #define ROTATION_PID_TOLERENCE_LAST 0.50
-#define ROTATION_PID_SETPOINT_OFFSET -0.0 //negative adjusts to the right
+#define ROTATION_PID_SETPOINT_OFFSET -3.4 //negative adjusts to the right
 
 #define RANGE_PID_PROPORTION 0.02
 #define RANGE_PID_INTEGRAL 0.0005
@@ -98,7 +98,7 @@
 #define RANGE_PID_MIN_OUTPUT -0.40
 #define RANGE_PID_MAX_OUTPUT 0.40
 
-#define RANGE_PID_SETPOINT 142.0
+#define RANGE_PID_SETPOINT 170.0
 #define RANGE_PID_TOLERENCE 4.0
 
 //Uncomment this to enable the PID tuning section of code that can help tune PIDs
@@ -323,6 +323,7 @@ public:
 		timeInState.Start();
 		m_disabledPeriodicLoops = 0;			// Reset the loop counter for disabled mode
 		compressor.Stop();
+		myRobot.SetSafetyEnabled(false);
 	}
 
 	void AutonomousInit(void) 
@@ -334,6 +335,7 @@ public:
 		autonomousState = AUTONOMOUS_LINING_UP_SHOT;
 		autonomousTempTimer.Reset();
 		autonomousTempTimer.Start();
+		myRobot.SetSafetyEnabled(true);
 	}
 
 	void TeleopInit(void) 
@@ -342,6 +344,7 @@ public:
 		timeInState.Reset();
 		timeInState.Start();
 		compressor.Start();
+		myRobot.SetSafetyEnabled(true);
 	}
 
 	/********************************** Periodic Routines *************************************/
@@ -533,8 +536,7 @@ public:
 			DISABLE_PID(rotationPID);
 			DISABLE_PID(rangePID);
 			myRobot.TankDrive(stickLeftDrive,stickRightDrive);	
-			//myRobot.SetSafetyEnabled(true);
-			myRobot.SetSafetyEnabled(false);
+			myRobot.SetSafetyEnabled(true);
 		}
 		CameraInitialize();
 
@@ -570,9 +572,11 @@ public:
 	{
 		int returnVal = -1;
 		BinaryImage *binaryImage;
-		myRobot.SetSafetyEnabled(false);
 		Image *imaqImage;
-		
+		if ((colorImage == (void *) 0) || (colorImage->GetWidth() == 0) || (colorImage->GetHeight() == 0))
+		{
+			return returnVal;
+		}
 		if (BUTTON_CAMERA_TAKE_DEBUG_PICTURES())
 		{
 			colorImage->Write("capturedImage.jpg");
@@ -580,9 +584,17 @@ public:
 		
 		//binaryImage = colorImage->ThresholdHSV(0, 255, 0, 255, 255, 0);
 		//binaryImage = colorImage->ThresholdHSV(56, 125, 55, 255, 255, 150);
+		
 		binaryImage = colorImage->ThresholdHSL(90, 115,30, 255, 70, 255);
 		
+		if ((binaryImage == (void *) 0) || (binaryImage->GetWidth() == 0) || (binaryImage->GetHeight() == 0))
+			return returnVal;
+		
 		imaqImage = binaryImage->GetImaqImage();
+		
+		if (imaqImage == (void *) 0)
+			return returnVal;
+		
 		if (BUTTON_CAMERA_TAKE_DEBUG_PICTURES())
 		{
 			binaryImage->Write("afterCLRThreshold.bmp");
