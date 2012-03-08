@@ -45,7 +45,7 @@
 
 //Controls defines - for new buttons, add a #define here and use it to get the key you want, that way we can change controls easily
 #define BUTTON_CAMERA_ALIGN_SHOT_BUTTON() stickRightDrive.GetTrigger()
-#define BUTTON_CAMERA_TAKE_DEBUG_PICTURES() 0
+#define BUTTON_CAMERA_TAKE_DEBUG_PICTURES() stickRightDrive.GetRawButton(3)
 
 #define BUTTON_ELEVATOR_BOTTOM_UP() (stickShooter.GetRawButton(2) || stickRightDrive.GetTop())
 #define BUTTON_ELEVATOR_BOTTOM_DOWN() stickShooter.GetRawButton(3)
@@ -71,13 +71,14 @@
 #define KINECT_RIGHT_LEG_BACK() kinectLeft.GetRawButton(6)
 #define KINECT_LEFT_LEG_FORWARD() kinectLeft.GetRawButton(7)
 #define KINECT_LEFT_LEG_BACK() kinectLeft.GetRawButton(8)
+#define KINECT_CONTROL_ENABLED() kinectLeft.GetRawButton(9)
 
 
 
 
 //PID Parameters
 #define ROTATION_PID_PROPORTION 0.18
-#define ROTATION_PID_INTEGRAL 0.02
+#define ROTATION_PID_INTEGRAL 0.03
 #define ROTATION_PID_DERIVATIVE 0.07
 
 #define ROTATION_PID_MIN_INPUT -30.0
@@ -98,7 +99,7 @@
 #define RANGE_PID_MIN_OUTPUT -0.40
 #define RANGE_PID_MAX_OUTPUT 0.40
 
-#define RANGE_PID_SETPOINT 170.0
+#define RANGE_PID_SETPOINT 184.0
 #define RANGE_PID_TOLERENCE 4.0
 
 //Uncomment this to enable the PID tuning section of code that can help tune PIDs
@@ -356,10 +357,13 @@ public:
 
 	void AutonomousPeriodic(void) 
 	{
-		m_autoPeriodicLoops++;
 		static bool useKinect = false;
 		static Kinect *kinect = Kinect::GetInstance();
-
+		if (m_autoPeriodicLoops == 0)
+		{
+			useKinect = false;
+		}
+		m_autoPeriodicLoops++;
 		CameraInitialize();
 		
 		//if there is a kinect present, and it sees somebody, use the kinect from here on in
@@ -374,7 +378,7 @@ public:
 
 		
 		//if the kinect isnt being used or the kinect autoshoot button is button is being pressed, and we haven't finished shooting
-		if (((useKinect == false) || (KINECT_RIGHT_LEG_FORWARD())) && (autonomousState != AUTONOMOUS_DONE))
+		if (((useKinect == false) || (KINECT_CONTROL_ENABLED() == false)) && (autonomousState != AUTONOMOUS_DONE))
 		{
 			autonomousTempTimer.Start(); //we call this to make sure the timer stays running whenever we are autoshooting.
 			
@@ -470,12 +474,19 @@ public:
 				ManageElevator(true,false,false,false,false,0.5);
 				PositionForTarget(false);
 				ManageCatapult(false, false, false);
-				myRobot.TankDrive(.75,.75);
 				if (autonomousTempTimer.Get() > 2.0)
 				{
 					autonomousTempTimer.Reset();
 					myRobot.TankDrive(0.0,0.0);
 					autonomousState = AUTONOMOUS_WAIT_FOR_TELEOP;
+				}
+				else if (autonomousTempTimer.Get() > 0.5)
+				{
+					myRobot.TankDrive(-.5,-.5);
+				}
+				else
+				{
+					myRobot.TankDrive(0.0,0.0);
 				}
 				break;
 			case AUTONOMOUS_WAIT_FOR_TELEOP:
@@ -504,8 +515,9 @@ public:
 		}
 		else
 		{
+			//TODO evaluate this logic.  It may not be neccessary.
 			//if the kinect autoshoot button is no longer being pressed or we were already done shooting
-			if ((autonomousState != AUTONOMOUS_DONE) || (KINECT_RIGHT_LEG_FORWARD()==false))
+			if ((autonomousState != AUTONOMOUS_DONE) || (KINECT_CONTROL_ENABLED()==false))
 			{
 				autonomousState = AUTONOMOUS_LINING_UP_SHOT; //reset the autonomous state if the kinect takes control;
 			}
@@ -888,6 +900,7 @@ public:
 			if (!catapult_shoot)button_released = true;
 			if (state_timer.Get() >= 1.0)
 			{
+				state_timer.Reset();
 				CATAPULT_PUSHER_EXTENDED(true);
 				catapult_state = CATAPULT_COCKING;
 			}
