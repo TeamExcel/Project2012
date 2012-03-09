@@ -55,7 +55,7 @@
 #define BUTTON_CATAPULT_SHOOT() stickShooter.GetTrigger()
 #define BUTTON_CATAPULT_LATCH() stickShooter.GetTrigger()
 #define BUTTON_CATAPULT_FORCE_SHOOT() stickShooter.GetRawButton(10)
-#define THROTTLE_ELEVATORS() (((-stickShooter.GetThrottle()) + 1) / 2)
+#define THROTTLE_ELEVATORS() (1.0)
 
 #define BUTTON_DUMPER_RAMP_EXTEND() stickShooter.GetRawButton(9)
 #define BUTTON_DUMPER_ROLLER() stickShooter.GetRawButton(11)
@@ -88,7 +88,7 @@
 
 #define ROTATION_PID_TOLERENCE_FIRST 2.50
 #define ROTATION_PID_TOLERENCE_LAST 0.50
-#define ROTATION_PID_SETPOINT_OFFSET -3.4 //negative adjusts to the right
+#define ROTATION_PID_SETPOINT_OFFSET -3.8 //negative adjusts to the right
 
 #define RANGE_PID_PROPORTION 0.02
 #define RANGE_PID_INTEGRAL 0.0005
@@ -99,8 +99,11 @@
 #define RANGE_PID_MIN_OUTPUT -0.40
 #define RANGE_PID_MAX_OUTPUT 0.40
 
-#define RANGE_PID_SETPOINT 184.0
+#define RANGE_PID_SETPOINT 166.0
 #define RANGE_PID_TOLERENCE 4.0
+
+//Comment this out to allow range adjusting in autonomous
+#define DISABLE_RANGE_ADJUST_IN_AUTONOMOUS
 
 //Uncomment this to enable the PID tuning section of code that can help tune PIDs
 //by running code in debug mode and using breakpoints.
@@ -320,19 +323,23 @@ public:
 	
 	void DisabledInit(void) 
 	{
+		m_autoPeriodicLoops = 0;				
+		m_telePeriodicLoops = 0;				
+		m_disabledPeriodicLoops = 0;			
 		timeInState.Reset();
 		timeInState.Start();
-		m_disabledPeriodicLoops = 0;			// Reset the loop counter for disabled mode
 		compressor.Stop();
 		myRobot.SetSafetyEnabled(false);
 	}
 
 	void AutonomousInit(void) 
 	{
+		m_autoPeriodicLoops = 0;				
+		m_telePeriodicLoops = 0;				
+		m_disabledPeriodicLoops = 0;			
 		timeInState.Reset();
 		timeInState.Start();
 		compressor.Start();
-		m_autoPeriodicLoops = 0;				// Reset the loop counter for autonomous mode
 		autonomousState = AUTONOMOUS_LINING_UP_SHOT;
 		autonomousTempTimer.Reset();
 		autonomousTempTimer.Start();
@@ -341,7 +348,9 @@ public:
 
 	void TeleopInit(void) 
 	{
-		m_telePeriodicLoops = 0;				// Reset the loop counter for teleop mode
+		m_autoPeriodicLoops = 0;				
+		m_telePeriodicLoops = 0;				
+		m_disabledPeriodicLoops = 0;			
 		timeInState.Reset();
 		timeInState.Start();
 		compressor.Start();
@@ -474,7 +483,7 @@ public:
 				ManageElevator(true,false,false,false,false,0.5);
 				PositionForTarget(false);
 				ManageCatapult(false, false, false);
-				if (autonomousTempTimer.Get() > 2.0)
+				if (autonomousTempTimer.Get() > 2.5)
 				{
 					autonomousTempTimer.Reset();
 					myRobot.TankDrive(0.0,0.0);
@@ -482,7 +491,7 @@ public:
 				}
 				else if (autonomousTempTimer.Get() > 0.5)
 				{
-					myRobot.TankDrive(-.5,-.5);
+					myRobot.TankDrive(-.6,-.6);
 				}
 				else
 				{
@@ -527,7 +536,9 @@ public:
 			//add code to bind each kinectStick button to each action we want to be able to do in autonomous
 			//ManageAppendages(KINECT_RIGHT_LEG_BACK(),false);
 			BRIDGE_RAM_EXTENDED(KINECT_RIGHT_LEG_BACK());
-			ManageElevator(KINECT_LEFT_LEG_FORWARD(),KINECT_LEFT_LEG_BACK(),KINECT_LEFT_LEG_FORWARD(),KINECT_LEFT_LEG_BACK(),KINECT_LEFT_LEG_FORWARD(),0.8);
+			ManageElevator((KINECT_LEFT_LEG_FORWARD() || KINECT_RIGHT_LEG_BACK()),KINECT_LEFT_LEG_BACK(),
+					KINECT_LEFT_LEG_FORWARD(),KINECT_LEFT_LEG_BACK(),
+					KINECT_LEFT_LEG_FORWARD(),1.0);
 			PositionForTarget(false);
 			ManageCatapult(false, false, false);
 			
@@ -963,10 +974,19 @@ public:
 			}
 			else if (rotationPID.OnTarget() && (on_target_count > 3))
 			{
-				DISABLE_PID(rotationPID);
-				rangePID.Enable();
-				state_targeting = TARGETING_DRIVING_TO_DISTANCE;
 				on_target_count = 0;
+				#ifdef DISABLE_RANGE_ADJUST_IN_AUTONOMOUS
+				if (m_autoPeriodicLoops != 0)
+				{
+					state_targeting = TARGETING_ROTATING_FINAL;
+				}
+				else
+				#endif
+				{
+					DISABLE_PID(rotationPID);
+					rangePID.Enable();
+					state_targeting = TARGETING_DRIVING_TO_DISTANCE;
+				}
 			}
 			else if (rotationPID.OnTarget())
 			{
@@ -1026,7 +1046,7 @@ public:
 				targetLocked = false;
 				on_target_count = 0;
 			}
-			else if (rotationPID.OnTarget() && (on_target_count > 3))
+			else if (rotationPID.OnTarget() && (on_target_count > 6))
 			{
 				targetLocked = true;
 				rotationPID.Enable();
