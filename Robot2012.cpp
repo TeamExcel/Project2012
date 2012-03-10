@@ -73,6 +73,11 @@
 #define KINECT_LEFT_LEG_BACK() kinectLeft.GetRawButton(8)
 #define KINECT_CONTROL_ENABLED() kinectLeft.GetRawButton(9)
 
+#define KINECT_ELEVATORS_UP() KINECT_RIGHT_LEG_RIGHT()
+#define KINECT_ELEVATORS_DOWN() KINECT_LEFT_LEG_LEFT()
+#define KINECT_AUTONOMOUS_SHOOT() KINECT_HEAD_RIGHT()
+#define KINECT_BRIDGE_RAM_EXTEND() KINECT_HEAD_LEFT()
+
 
 
 
@@ -88,7 +93,7 @@
 
 #define ROTATION_PID_TOLERENCE_FIRST 2.50
 #define ROTATION_PID_TOLERENCE_LAST 0.50
-#define ROTATION_PID_SETPOINT_OFFSET -3.8 //negative adjusts to the right
+#define ROTATION_PID_SETPOINT_OFFSET -3.9 //negative adjusts to the right
 
 #define RANGE_PID_PROPORTION 0.02
 #define RANGE_PID_INTEGRAL 0.0005
@@ -104,7 +109,9 @@
 
 //Comment this out to allow range adjusting in autonomous
 #define DISABLE_RANGE_ADJUST_IN_AUTONOMOUS
+#define ENABLE_FOUR_SHOT_SUPER_AUTONOMOUS
 
+#define AUTONOMOUS_BACKUP_TIME 4.4
 //Uncomment this to enable the PID tuning section of code that can help tune PIDs
 //by running code in debug mode and using breakpoints.
 //#define PID_TUNING
@@ -237,8 +244,17 @@ class Robot2012 : public IterativeRobot
 		AUTONOMOUS_REARMING_FIRST_SHOT,
 		AUTONOMOUS_RELOADING,
 		AUTONOMOUS_SHOOTING_SECOND_SHOT,
+#ifdef ENABLE_FOUR_SHOT_SUPER_AUTONOMOUS		
+		AUTONOMOUS_REARMING_SECOND_SHOT,
+		AUTONOMOUS_RELOADING_FOR_THIRD,
+		AUTONOMOUS_SHOOTING_THIRD_SHOT,
+		AUTONOMOUS_REARMING_THIRD_SHOT,
+		AUTONOMOUS_RELOADING_FOR_FOURTH,
+		AUTONOMOUS_SHOOTING_FOURTH_SHOT,
+#else
 		AUTONOMOUS_HITTING_BRIDGE,
 		AUTONOMOUS_WAIT_FOR_TELEOP,
+#endif
 		AUTONOMOUS_DONE
 	}AUTONOMOUS_STATE;
 	
@@ -288,7 +304,7 @@ public:
 		myRobot.SetInvertedMotor(myRobot.kRearRightMotor, true);
 		myRobot.SetInvertedMotor(myRobot.kFrontLeftMotor, true);
 		myRobot.SetInvertedMotor(myRobot.kFrontRightMotor, true);
-
+		
 		// Initialize counters to record the number of loops completed in autonomous and teleop modes
 		m_autoPeriodicLoops = 0;
 		m_disabledPeriodicLoops = 0;
@@ -367,36 +383,26 @@ public:
 	void AutonomousPeriodic(void) 
 	{
 		static bool useKinect = false;
+		static bool kinectAutonomous = false;
 		static Kinect *kinect = Kinect::GetInstance();
 		if (m_autoPeriodicLoops == 0)
 		{
 			useKinect = false;
+			kinectAutonomous = false;
 		}
 		m_autoPeriodicLoops++;
 		CameraInitialize();
-		
-		//if there is a kinect present, and it sees somebody, use the kinect from here on in
-		if (kinect != (void *) 0)
-		{
-			if (kinect->GetNumberOfPlayers() != 0)
-			{
-				useKinect = true;
-			}
-		}
-
 
 		
-		//if the kinect isnt being used or the kinect autoshoot button is button is being pressed, and we haven't finished shooting
-		if (((useKinect == false) || (KINECT_CONTROL_ENABLED() == false)) && (autonomousState != AUTONOMOUS_DONE))
-		{
-			autonomousTempTimer.Start(); //we call this to make sure the timer stays running whenever we are autoshooting.
+		#ifdef ENABLE_FOUR_SHOT_SUPER_AUTONOMOUS
+		autonomousTempTimer.Start(); //we call this to make sure the timer stays running whenever we are autoshooting.
 			
 			//Depending on the current autonomousState, we run one of the following cases (this is called a switch case statement)
 			switch (autonomousState)
 			{
+			//Cumulative time: 0.0
 			case AUTONOMOUS_LINING_UP_SHOT:
 				//in this state set all the managers to off accept the targeter
-
 				ManageAppendages(false,false);
 				ManageElevator(false,false,false,false,false,0.5);
 				ManageCatapult(false, false, false);
@@ -405,145 +411,302 @@ public:
 				
 				
 				//if targetLocked or autonTempTimer > 5sec goto the next state
-				if ((targetLocked == true) || (autonomousTempTimer.Get() > 5.0))
+				if ((autonomousTempTimer.Get() > 2.0))
 				{
 					autonomousTempTimer.Reset();
 					autonomousState = AUTONOMOUS_SHOOTING_FIRST_SHOT;
 				}
 				break;
+			//Cumulative time: 2.0
 			case AUTONOMOUS_SHOOTING_FIRST_SHOT:
 				ManageAppendages(false,false);
 				ManageElevator(false,false,false,false,false,0.5);
 				PositionForTarget(true);
-				//if target_locked is true (or time > 1.0) push the catapult fire (and force_shoot) and reset the autonomousTempTimer
-				if ((targetLocked == true) || (autonomousTempTimer.Get() > 1.0))
-				{
-					ManageCatapult(true, false, true);
-					autonomousTempTimer.Reset();
-					autonomousState = AUTONOMOUS_REARMING_FIRST_SHOT;
-				}
-				else
-				{
-					ManageCatapult(false, false, false);
-				}
-				
+				ManageCatapult(true, false, true);
+				autonomousState = AUTONOMOUS_REARMING_FIRST_SHOT;
 				break;
+			//Cumulative time: 2.01
 			case AUTONOMOUS_REARMING_FIRST_SHOT:
-				//then let go of the latch button and wait 2 second before going to AUTONOMOUS_RELOADING
 				ManageAppendages(false,false);
 				ManageElevator(false,false,false,false,false,0.5);
 				PositionForTarget(true);
 				ManageCatapult(false, false, false);
-				if (autonomousTempTimer.Get() > 2.0)
+				if (autonomousTempTimer.Get() > 1.0)
 				{
 					autonomousTempTimer.Reset();
 					autonomousState = AUTONOMOUS_RELOADING;
 				}
 				break;
+			//Cumulative time: 3.0
 			case AUTONOMOUS_RELOADING:
 				ManageAppendages(false,false);
-				ManageElevator(false,false,false,true,false,0.5);
+				ManageElevator(true,false,false,true,false,0.5);
 				PositionForTarget(true);
 				ManageCatapult(false, true, false);
-				if (autonomousTempTimer.Get()> 4.0)
+				if (autonomousTempTimer.Get()> 3.0)
 				{
 					ManageCatapult(false, false, false);
 					autonomousTempTimer.Reset();
 					autonomousState = AUTONOMOUS_SHOOTING_SECOND_SHOT;
 				}
-				//push the latch button to lock the arm in place and retract the pusher
-				//turn on the top elevator (downward) for 4 seconds to reload the ball
 				break;
+			//Cumulative time: 6.0
 			case AUTONOMOUS_SHOOTING_SECOND_SHOT:
 				ManageAppendages(false,false);
-				ManageElevator(false,false,false,true,false,0.5);
+				ManageElevator(true,false,false,true,false,0.5);
 				PositionForTarget(true);
 				//if target_locked is true (or time > 1.0) push the catapult fire (and force_shoot) and wait 2 second before going to AUTONOMOUS_DONE
-				if ((targetLocked == true) || (autonomousTempTimer.Get() > 1.0))
+				ManageCatapult(true, false, true);
+				autonomousState = AUTONOMOUS_REARMING_SECOND_SHOT;
+				break;
+			//Cumulative time: 6.01
+			case AUTONOMOUS_REARMING_SECOND_SHOT:
+				ManageAppendages(false,false);
+				ManageElevator(true,false,false,true,false,0.5);
+				PositionForTarget(true);
+				ManageCatapult(false, false, false);
+				if (autonomousTempTimer.Get() > 1.0)
 				{
-					ManageCatapult(true, false, true);
 					autonomousTempTimer.Reset();
-					if (useKinect == true)
-					{
-						autonomousState = AUTONOMOUS_DONE;
-					}
-					else
-					{
-						autonomousState = AUTONOMOUS_HITTING_BRIDGE;
-					}
+					autonomousState = AUTONOMOUS_RELOADING;
 				}
-				else
+				break;
+			//Cumulative time: 7.0
+			case AUTONOMOUS_RELOADING_FOR_THIRD:
+				ManageAppendages(false,false);
+				ManageElevator(true,false,false,true,false,0.5);
+				PositionForTarget(true);
+				ManageCatapult(false, true, false);
+				if (autonomousTempTimer.Get()> 3.0)
 				{
 					ManageCatapult(false, false, false);
+					autonomousTempTimer.Reset();
+					autonomousState = AUTONOMOUS_SHOOTING_SECOND_SHOT;
 				}
 				break;
-			case AUTONOMOUS_HITTING_BRIDGE:
-				//ManageAppendages(true,false); //this complicates it more than neccessary, just control the bridge ram manually
-				BRIDGE_RAM_EXTENDED(true);
-				ManageElevator(true,false,false,false,false,0.5);
-				PositionForTarget(false);
+			//Cumulative time: 10.0
+			case AUTONOMOUS_SHOOTING_THIRD_SHOT:
+				ManageAppendages(false,false);
+				ManageElevator(true,false,false,true,false,0.5);
+				PositionForTarget(true);
+				//if target_locked is true (or time > 1.0) push the catapult fire (and force_shoot) and wait 2 second before going to AUTONOMOUS_DONE
+				ManageCatapult(true, false, true);
+				autonomousState = AUTONOMOUS_REARMING_THIRD_SHOT;
+				break;
+			//Cumulative time: 10.01
+			case AUTONOMOUS_REARMING_THIRD_SHOT:
+				ManageAppendages(false,false);
+				ManageElevator(true,false,false,true,false,0.5);
+				PositionForTarget(true);
 				ManageCatapult(false, false, false);
-				if (autonomousTempTimer.Get() > 2.5)
+				if (autonomousTempTimer.Get() > 1.0)
 				{
 					autonomousTempTimer.Reset();
-					myRobot.TankDrive(0.0,0.0);
-					autonomousState = AUTONOMOUS_WAIT_FOR_TELEOP;
-				}
-				else if (autonomousTempTimer.Get() > 0.5)
-				{
-					myRobot.TankDrive(-.6,-.6);
-				}
-				else
-				{
-					myRobot.TankDrive(0.0,0.0);
+					autonomousState = AUTONOMOUS_RELOADING;
 				}
 				break;
-			case AUTONOMOUS_WAIT_FOR_TELEOP:
-				//ManageAppendages(false,false);
-				if (autonomousTempTimer.Get() < 2.0)
+			//Cumulative time: 11.0
+			case AUTONOMOUS_RELOADING_FOR_FOURTH:
+				ManageAppendages(false,false);
+				ManageElevator(true,false,false,true,false,0.5);
+				PositionForTarget(true);
+				ManageCatapult(false, true, false);
+				if (autonomousTempTimer.Get()> 3.0)
 				{
-					BRIDGE_RAM_EXTENDED(true);
+					ManageCatapult(false, false, false);
+					autonomousTempTimer.Reset();
+					autonomousState = AUTONOMOUS_SHOOTING_SECOND_SHOT;
 				}
-				else
-				{
-					BRIDGE_RAM_EXTENDED(false);
-				}
-				ManageElevator(true,false,false,false,false,0.5);
-				PositionForTarget(false);
-				ManageCatapult(false, false, false);
-				myRobot.TankDrive(0.0,0.0);
 				break;
-			default:
+			//Cumulative time 14.0
+			case AUTONOMOUS_SHOOTING_FOURTH_SHOT:
+				ManageAppendages(false,false);
+				ManageElevator(false,false,false,false,false,0.5);
+				PositionForTarget(true);
+				ManageCatapult(true, false, true);
+				autonomousState = AUTONOMOUS_DONE;
+				break;
 			case AUTONOMOUS_DONE:
 				ManageAppendages(false,false);
 				ManageElevator(false,false,false,false,false,0.5);
 				PositionForTarget(true);
-				ManageCatapult(false, false, false);
+				ManageCatapult(true, false, true);
 				break;
 			}
-		}
-		else
-		{
-			//TODO evaluate this logic.  It may not be neccessary.
-			//if the kinect autoshoot button is no longer being pressed or we were already done shooting
-			if ((autonomousState != AUTONOMOUS_DONE) || (KINECT_CONTROL_ENABLED()==false))
+		#else
+			//if there is a kinect present, and it sees somebody, use the kinect from here on in
+			if (kinect != (void *) 0)
 			{
-				autonomousState = AUTONOMOUS_LINING_UP_SHOT; //reset the autonomous state if the kinect takes control;
+				if (kinect->GetNumberOfPlayers() != 0)
+				{
+					useKinect = true;
+				}
 			}
-			autonomousTempTimer.Stop();
-			autonomousTempTimer.Reset();
-			myRobot.TankDrive(kinectLeft.GetY() * 0.7, kinectRight.GetY() * 0.7);
-			//add code to bind each kinectStick button to each action we want to be able to do in autonomous
-			//ManageAppendages(KINECT_RIGHT_LEG_BACK(),false);
-			BRIDGE_RAM_EXTENDED(KINECT_RIGHT_LEG_BACK());
-			ManageElevator((KINECT_LEFT_LEG_FORWARD() || KINECT_RIGHT_LEG_BACK()),KINECT_LEFT_LEG_BACK(),
-					KINECT_LEFT_LEG_FORWARD(),KINECT_LEFT_LEG_BACK(),
-					KINECT_LEFT_LEG_FORWARD(),1.0);
-			PositionForTarget(false);
-			ManageCatapult(false, false, false);
+
+			if ((useKinect == true) && (KINECT_CONTROL_ENABLED() == true))
+			{
+				kinectAutonomous = KINECT_AUTONOMOUS_SHOOT();
+			}
 			
-		}
-		
+			//if the kinect isnt being used or the kinect autoshoot button is button is being pressed, and we haven't finished shooting
+			if (((useKinect == false) || (kinectAutonomous == true)) && (autonomousState != AUTONOMOUS_DONE))
+			{
+				autonomousTempTimer.Start(); //we call this to make sure the timer stays running whenever we are autoshooting.
+				
+				//Depending on the current autonomousState, we run one of the following cases (this is called a switch case statement)
+				switch (autonomousState)
+				{
+				case AUTONOMOUS_LINING_UP_SHOT:
+					//in this state set all the managers to off accept the targeter
+	
+					ManageAppendages(false,false);
+					ManageElevator(false,false,false,false,false,0.5);
+					ManageCatapult(false, false, false);
+					//if you hover over the function name (ie ManageAppendages) you can see what parameters it takes, and determine what they do by their name
+					PositionForTarget(true);
+					
+					
+					//if targetLocked or autonTempTimer > 5sec goto the next state
+					if ((targetLocked == true) || (autonomousTempTimer.Get() > 5.0))
+					{
+						autonomousTempTimer.Reset();
+						autonomousState = AUTONOMOUS_SHOOTING_FIRST_SHOT;
+					}
+					break;
+				case AUTONOMOUS_SHOOTING_FIRST_SHOT:
+					ManageAppendages(false,false);
+					ManageElevator(false,false,false,false,false,0.5);
+					PositionForTarget(true);
+					//if target_locked is true (or time > 1.0) push the catapult fire (and force_shoot) and reset the autonomousTempTimer
+					if ((targetLocked == true) || (autonomousTempTimer.Get() > 1.0))
+					{
+						ManageCatapult(true, false, true);
+						autonomousTempTimer.Reset();
+						autonomousState = AUTONOMOUS_REARMING_FIRST_SHOT;
+					}
+					else
+					{
+						ManageCatapult(false, false, false);
+					}
+					
+					break;
+				case AUTONOMOUS_REARMING_FIRST_SHOT:
+					//then let go of the latch button and wait 2 second before going to AUTONOMOUS_RELOADING
+					ManageAppendages(false,false);
+					ManageElevator(false,false,false,false,false,0.5);
+					PositionForTarget(true);
+					ManageCatapult(false, false, false);
+					if (autonomousTempTimer.Get() > 2.0)
+					{
+						autonomousTempTimer.Reset();
+						autonomousState = AUTONOMOUS_RELOADING;
+					}
+					break;
+				case AUTONOMOUS_RELOADING:
+					ManageAppendages(false,false);
+					ManageElevator(false,false,false,true,false,0.5);
+					ManageElevator(false,false,false,true,false,0.5);
+					PositionForTarget(true);
+					ManageCatapult(false, true, false);
+					if (autonomousTempTimer.Get()> 4.0)
+					{
+						ManageCatapult(false, false, false);
+						autonomousTempTimer.Reset();
+						autonomousState = AUTONOMOUS_SHOOTING_SECOND_SHOT;
+					}
+					//push the latch button to lock the arm in place and retract the pusher
+					//turn on the top elevator (downward) for 4 seconds to reload the ball
+					break;
+				case AUTONOMOUS_SHOOTING_SECOND_SHOT:
+					ManageAppendages(false,false);
+					ManageElevator(false,false,false,true,false,0.5);
+					PositionForTarget(true);
+					//if target_locked is true (or time > 1.0) push the catapult fire (and force_shoot) and wait 2 second before going to AUTONOMOUS_DONE
+					if ((targetLocked == true) || (autonomousTempTimer.Get() > 1.0))
+					{
+						ManageCatapult(true, false, true);
+						autonomousTempTimer.Reset();
+						if (useKinect == true)
+						{
+							autonomousState = AUTONOMOUS_DONE;
+						}
+						else
+						{
+							autonomousState = AUTONOMOUS_HITTING_BRIDGE;
+						}
+					}
+					else
+					{
+						ManageCatapult(false, false, false);
+					}
+					break;
+				case AUTONOMOUS_HITTING_BRIDGE:
+					//ManageAppendages(true,false); //this complicates it more than neccessary, just control the bridge ram manually
+					BRIDGE_RAM_EXTENDED(true);
+					ManageElevator(true,false,false,false,false,0.5);
+					PositionForTarget(false);
+					ManageCatapult(false, false, false);
+					if (autonomousTempTimer.Get() > AUTONOMOUS_BACKUP_TIME)
+					{
+						autonomousTempTimer.Reset();
+						myRobot.TankDrive(0.0,0.0);
+						autonomousState = AUTONOMOUS_WAIT_FOR_TELEOP;
+					}
+					else if (autonomousTempTimer.Get() > 0.5)
+					{
+						myRobot.TankDrive(-.5,-.5);
+					}
+					else
+					{
+						myRobot.TankDrive(0.0,0.0);
+					}
+					break;
+				case AUTONOMOUS_WAIT_FOR_TELEOP:
+					//ManageAppendages(false,false);
+					if (autonomousTempTimer.Get() < 2.0)
+					{
+						BRIDGE_RAM_EXTENDED(true);
+					}
+					else
+					{
+						BRIDGE_RAM_EXTENDED(false);
+					}
+					ManageElevator(true,false,false,false,false,0.5);
+					PositionForTarget(false);
+					ManageCatapult(false, false, false);
+					myRobot.TankDrive(0.0,0.0);
+					break;
+				default:
+				case AUTONOMOUS_DONE:
+					ManageAppendages(false,false);
+					ManageElevator(false,false,false,false,false,0.5);
+					PositionForTarget(true);
+					ManageCatapult(false, false, false);
+					break;
+				}
+			}
+			else if (KINECT_CONTROL_ENABLED() == true)
+			{
+				//TODO evaluate this logic.  It may not be neccessary.
+				//if the kinect autoshoot button is no longer being pressed or we were already done shooting
+				if ((autonomousState != AUTONOMOUS_DONE) || (KINECT_AUTONOMOUS_SHOOT()==false))
+				{
+					autonomousState = AUTONOMOUS_LINING_UP_SHOT; //reset the autonomous state if the kinect takes control;
+				}
+				autonomousTempTimer.Stop();
+				autonomousTempTimer.Reset();
+				myRobot.TankDrive(kinectLeft.GetY() * 0.7, kinectRight.GetY() * 0.7);
+				//add code to bind each kinectStick button to each action we want to be able to do in autonomous
+				//ManageAppendages(KINECT_RIGHT_LEG_BACK(),false);
+				BRIDGE_RAM_EXTENDED(KINECT_BRIDGE_RAM_EXTEND());
+				ManageElevator((KINECT_ELEVATORS_UP() || KINECT_BRIDGE_RAM_EXTEND()),KINECT_ELEVATORS_DOWN(),
+						KINECT_ELEVATORS_UP(),KINECT_ELEVATORS_DOWN(),
+						KINECT_ELEVATORS_UP(),1.0);
+				PositionForTarget(false);
+				ManageCatapult(false, false, false);
+				
+			}
+		#endif
 		
 		
 	}
@@ -872,7 +1035,7 @@ public:
 			CATAPULT_PUSHER_EXTENDED(true);
 			CATAPULT_LATCH_EXTENDED(false);
 			if (!catapult_latch)button_released = true;
-			if (state_timer.Get() >= 2.0);
+			if (state_timer.Get() >= 1.0);
 			{
 				state_timer.Reset();
 				catapult_state = CATAPULT_WAITING_LATCH;
@@ -999,6 +1162,7 @@ public:
 				on_target_count = 0;
 			}
 			break;
+			//TODO need to put in a small delay for autonomous
 		case TARGETING_DRIVING_TO_DISTANCE:
 			if (camera_align_shot == false)
 			{
