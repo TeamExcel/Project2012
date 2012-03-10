@@ -405,6 +405,7 @@ public:
 			{
 			//Cumulative time: 0.0
 			case AUTONOMOUS_LINING_UP_SHOT:
+#if (LINING_UP_IN_AUTONOMOUS == true)
 				//in this state set all the managers to off accept the targeter
 				ManageAppendages(false,false);
 				ManageElevator(false,false,false,false,false,0.5);
@@ -420,7 +421,8 @@ public:
 					autonomousState = AUTONOMOUS_SHOOTING_FIRST_SHOT;
 				}
 				break;
-			//Cumulative time: 2.0
+#endif
+			//Cumulative time: 0.0
 			case AUTONOMOUS_SHOOTING_FIRST_SHOT:
 				ManageAppendages(false,false);
 				ManageElevator(false,false,false,false,false,0.5);
@@ -428,10 +430,10 @@ public:
 				ManageCatapult(true, false, true);
 				autonomousState = AUTONOMOUS_REARMING_FIRST_SHOT;
 				break;
-			//Cumulative time: 2.01
+			//Cumulative time: 0.01
 			case AUTONOMOUS_REARMING_FIRST_SHOT:
 				ManageAppendages(false,false);
-				ManageElevator(false,false,false,false,false,0.5);
+				ManageElevator(true,false,false,true,false,0.5);	//bring ball 2 to scoring position
 				PositionForTarget(LINING_UP_IN_AUTONOMOUS);
 				ManageCatapult(false, false, false);
 				if (autonomousTempTimer.Get() > 1.0)
@@ -440,20 +442,20 @@ public:
 					autonomousState = AUTONOMOUS_RELOADING;
 				}
 				break;
-			//Cumulative time: 3.0
+			//Cumulative time: 1.0
 			case AUTONOMOUS_RELOADING:
 				ManageAppendages(false,false);
-				ManageElevator(true,false,false,true,false,0.5);
+				ManageElevator(false,false,false,true,false,0.5);
 				PositionForTarget(LINING_UP_IN_AUTONOMOUS);
 				ManageCatapult(false, true, false);
-				if (autonomousTempTimer.Get()> 3.0)
+				if (autonomousTempTimer.Get()> 2.5)
 				{
 					ManageCatapult(false, false, false);
 					autonomousTempTimer.Reset();
 					autonomousState = AUTONOMOUS_SHOOTING_SECOND_SHOT;
 				}
 				break;
-			//Cumulative time: 6.0
+			//Cumulative time: 3.5
 			case AUTONOMOUS_SHOOTING_SECOND_SHOT:
 				ManageAppendages(false,false);
 				ManageElevator(true,false,false,true,false,0.5);
@@ -462,7 +464,7 @@ public:
 				ManageCatapult(true, false, true);
 				autonomousState = AUTONOMOUS_REARMING_SECOND_SHOT;
 				break;
-			//Cumulative time: 6.01
+			//Cumulative time: 3.51
 			case AUTONOMOUS_REARMING_SECOND_SHOT:
 				ManageAppendages(false,false);
 				ManageElevator(true,false,false,true,false,0.5);
@@ -474,20 +476,20 @@ public:
 					autonomousState = AUTONOMOUS_RELOADING;
 				}
 				break;
-			//Cumulative time: 7.0
+			//Cumulative time: 4.5
 			case AUTONOMOUS_RELOADING_FOR_THIRD:
 				ManageAppendages(false,false);
-				ManageElevator(true,false,false,true,false,0.5);
+				ManageElevator(false,false,false,true,false,0.5);
 				PositionForTarget(LINING_UP_IN_AUTONOMOUS);
 				ManageCatapult(false, true, false);
-				if (autonomousTempTimer.Get()> 3.0)
+				if (autonomousTempTimer.Get()> 2.5)
 				{
 					ManageCatapult(false, false, false);
 					autonomousTempTimer.Reset();
 					autonomousState = AUTONOMOUS_SHOOTING_SECOND_SHOT;
 				}
 				break;
-			//Cumulative time: 10.0
+			//Cumulative time: 7.0
 			case AUTONOMOUS_SHOOTING_THIRD_SHOT:
 				ManageAppendages(false,false);
 				ManageElevator(true,false,false,true,false,0.5);
@@ -496,7 +498,7 @@ public:
 				ManageCatapult(true, false, true);
 				autonomousState = AUTONOMOUS_REARMING_THIRD_SHOT;
 				break;
-			//Cumulative time: 10.01
+			//Cumulative time: 7.01
 			case AUTONOMOUS_REARMING_THIRD_SHOT:
 				ManageAppendages(false,false);
 				ManageElevator(true,false,false,true,false,0.5);
@@ -508,20 +510,20 @@ public:
 					autonomousState = AUTONOMOUS_RELOADING;
 				}
 				break;
-			//Cumulative time: 11.0
+			//Cumulative time: 8.0
 			case AUTONOMOUS_RELOADING_FOR_FOURTH:
 				ManageAppendages(false,false);
-				ManageElevator(true,false,false,true,false,0.5);
+				ManageElevator(false,false,false,true,false,0.5);
 				PositionForTarget(LINING_UP_IN_AUTONOMOUS);
 				ManageCatapult(false, true, false);
-				if (autonomousTempTimer.Get()> 3.0)
+				if (autonomousTempTimer.Get() > 2.5)
 				{
 					ManageCatapult(false, false, false);
 					autonomousTempTimer.Reset();
 					autonomousState = AUTONOMOUS_SHOOTING_SECOND_SHOT;
 				}
 				break;
-			//Cumulative time 14.0
+			//Cumulative time 10.5
 			case AUTONOMOUS_SHOOTING_FOURTH_SHOT:
 				ManageAppendages(false,false);
 				ManageElevator(false,false,false,false,false,0.5);
@@ -956,15 +958,23 @@ public:
 			break;
 		}
 	}
-
+//#define TEST_ELEVATOR_TIMING
 	void ManageElevator(bool bottom_up, bool bottom_down, bool top_up, bool top_down, bool dumper_roller, float throttle)
 	{
-		driverStationLCD->PrintfLine((DriverStationLCD::Line) 3, "Throttle: %f", throttle);
-		
-			
-		
+		static Timer elevatorTimer;
+#ifdef TEST_ELEVATOR_TIMING
+		if (!(bottom_up || top_down))
+		{
+			elevatorTimer.Reset();
+		}
+#endif
 		if (bottom_up)
 		{
+#ifdef TEST_ELEVATOR_TIMING
+			//.75 second minimum
+			elevatorTimer.Start();
+			driverStationLCD->PrintfLine((DriverStationLCD::Line) 3, "Bottom Timer: %f", elevatorTimer.Get());
+#endif
 			jaguarElevatorBottom1.Set(-ELEVATOR_SPEED_BOTTOM, BOTTOM_ROLLERS_SYNC_GROUP);
 			jaguarElevatorBottom2.Set(-ELEVATOR_SPEED_BOTTOM, BOTTOM_ROLLERS_SYNC_GROUP);
 		}
@@ -985,12 +995,18 @@ public:
 		}
 		else if (top_down)
 		{
+#ifdef TEST_ELEVATOR_TIMING
+			//Took 2.03
+			elevatorTimer.Start();
+			driverStationLCD->PrintfLine((DriverStationLCD::Line) 3, "Top Timer: %f", elevatorTimer.Get());
+#endif
 			jaguarElevatorTop.Set(-ELEVATOR_SPEED_TOP);
 		}
 		else
 		{
 			jaguarElevatorTop.Set(0.0);
 		}
+		
 		
 		if (dumper_roller)
 		{
