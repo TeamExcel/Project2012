@@ -570,7 +570,7 @@ public:
 					
 					
 					//if targetLocked or autonTempTimer > 5sec goto the next state
-					if ((targetLocked == true) || (autonomousTempTimer.Get() > 5.0))
+					if ((targetLocked == true) || (autonomousTempTimer.Get() > 5.0) || (LINING_UP_IN_AUTONOMOUS == false))
 					{
 						autonomousTempTimer.Reset();
 						autonomousState = AUTONOMOUS_SHOOTING_FIRST_SHOT;
@@ -581,7 +581,7 @@ public:
 					ManageElevator(false,false,false,false,false,0.5);
 					PositionForTarget(LINING_UP_IN_AUTONOMOUS);
 					//if target_locked is true (or time > 1.0) push the catapult fire (and force_shoot) and reset the autonomousTempTimer
-					if ((targetLocked == true) || (autonomousTempTimer.Get() > 1.0))
+					if ((targetLocked == true) || (autonomousTempTimer.Get() > 1.0) || (LINING_UP_IN_AUTONOMOUS == false))
 					{
 						ManageCatapult(true, false, true);
 						autonomousTempTimer.Reset();
