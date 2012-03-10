@@ -349,6 +349,7 @@ public:
 		timeInState.Start();
 		compressor.Stop();
 		myRobot.SetSafetyEnabled(false);
+		ManageCatapult(false,false,false);
 	}
 
 	void AutonomousInit(void) 
@@ -626,7 +627,7 @@ public:
 					ManageElevator(false,false,false,true,false,0.5);
 					PositionForTarget(LINING_UP_IN_AUTONOMOUS);
 					//if target_locked is true (or time > 1.0) push the catapult fire (and force_shoot) and wait 2 second before going to AUTONOMOUS_DONE
-					if ((targetLocked == true) || (autonomousTempTimer.Get() > 1.0))
+					if ((targetLocked == true) || (autonomousTempTimer.Get() > 2.0))
 					{
 						ManageCatapult(true, false, true);
 						autonomousTempTimer.Reset();
@@ -645,8 +646,7 @@ public:
 					}
 					break;
 				case AUTONOMOUS_HITTING_BRIDGE:
-					//ManageAppendages(true,false); //this complicates it more than neccessary, just control the bridge ram manually
-					BRIDGE_RAM_EXTENDED(true);
+					ManageAppendages(true,false);
 					ManageElevator(true,false,false,false,false,0.5);
 					PositionForTarget(false);
 					ManageCatapult(false, false, false);
@@ -666,15 +666,7 @@ public:
 					}
 					break;
 				case AUTONOMOUS_WAIT_FOR_TELEOP:
-					//ManageAppendages(false,false);
-					if (autonomousTempTimer.Get() < 2.0)
-					{
-						BRIDGE_RAM_EXTENDED(true);
-					}
-					else
-					{
-						BRIDGE_RAM_EXTENDED(false);
-					}
+					ManageAppendages(false,false);
 					ManageElevator(true,false,false,false,false,0.5);
 					PositionForTarget(false);
 					ManageCatapult(false, false, false);
