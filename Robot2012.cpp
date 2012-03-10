@@ -104,12 +104,15 @@
 #define RANGE_PID_MIN_OUTPUT -0.40
 #define RANGE_PID_MAX_OUTPUT 0.40
 
-#define RANGE_PID_SETPOINT 166.0
+#define RANGE_PID_SETPOINT 150.0
 #define RANGE_PID_TOLERENCE 4.0
 
 //Comment this out to allow range adjusting in autonomous
 #define DISABLE_RANGE_ADJUST_IN_AUTONOMOUS
-#define ENABLE_FOUR_SHOT_SUPER_AUTONOMOUS
+//#define ENABLE_FOUR_SHOT_SUPER_AUTONOMOUS
+#define DISABLE_RANGE_FINDER
+#define LINING_UP_IN_AUTONOMOUS false
+
 
 #define AUTONOMOUS_BACKUP_TIME 4.4
 //Uncomment this to enable the PID tuning section of code that can help tune PIDs
@@ -407,7 +410,7 @@ public:
 				ManageElevator(false,false,false,false,false,0.5);
 				ManageCatapult(false, false, false);
 				//if you hover over the function name (ie ManageAppendages) you can see what parameters it takes, and determine what they do by their name
-				PositionForTarget(true);
+				PositionForTarget(LINING_UP_IN_AUTONOMOUS);
 				
 				
 				//if targetLocked or autonTempTimer > 5sec goto the next state
@@ -421,7 +424,7 @@ public:
 			case AUTONOMOUS_SHOOTING_FIRST_SHOT:
 				ManageAppendages(false,false);
 				ManageElevator(false,false,false,false,false,0.5);
-				PositionForTarget(true);
+				PositionForTarget(LINING_UP_IN_AUTONOMOUS);
 				ManageCatapult(true, false, true);
 				autonomousState = AUTONOMOUS_REARMING_FIRST_SHOT;
 				break;
@@ -429,7 +432,7 @@ public:
 			case AUTONOMOUS_REARMING_FIRST_SHOT:
 				ManageAppendages(false,false);
 				ManageElevator(false,false,false,false,false,0.5);
-				PositionForTarget(true);
+				PositionForTarget(LINING_UP_IN_AUTONOMOUS);
 				ManageCatapult(false, false, false);
 				if (autonomousTempTimer.Get() > 1.0)
 				{
@@ -441,7 +444,7 @@ public:
 			case AUTONOMOUS_RELOADING:
 				ManageAppendages(false,false);
 				ManageElevator(true,false,false,true,false,0.5);
-				PositionForTarget(true);
+				PositionForTarget(LINING_UP_IN_AUTONOMOUS);
 				ManageCatapult(false, true, false);
 				if (autonomousTempTimer.Get()> 3.0)
 				{
@@ -454,7 +457,7 @@ public:
 			case AUTONOMOUS_SHOOTING_SECOND_SHOT:
 				ManageAppendages(false,false);
 				ManageElevator(true,false,false,true,false,0.5);
-				PositionForTarget(true);
+				PositionForTarget(LINING_UP_IN_AUTONOMOUS);
 				//if target_locked is true (or time > 1.0) push the catapult fire (and force_shoot) and wait 2 second before going to AUTONOMOUS_DONE
 				ManageCatapult(true, false, true);
 				autonomousState = AUTONOMOUS_REARMING_SECOND_SHOT;
@@ -463,7 +466,7 @@ public:
 			case AUTONOMOUS_REARMING_SECOND_SHOT:
 				ManageAppendages(false,false);
 				ManageElevator(true,false,false,true,false,0.5);
-				PositionForTarget(true);
+				PositionForTarget(LINING_UP_IN_AUTONOMOUS);
 				ManageCatapult(false, false, false);
 				if (autonomousTempTimer.Get() > 1.0)
 				{
@@ -475,7 +478,7 @@ public:
 			case AUTONOMOUS_RELOADING_FOR_THIRD:
 				ManageAppendages(false,false);
 				ManageElevator(true,false,false,true,false,0.5);
-				PositionForTarget(true);
+				PositionForTarget(LINING_UP_IN_AUTONOMOUS);
 				ManageCatapult(false, true, false);
 				if (autonomousTempTimer.Get()> 3.0)
 				{
@@ -488,7 +491,7 @@ public:
 			case AUTONOMOUS_SHOOTING_THIRD_SHOT:
 				ManageAppendages(false,false);
 				ManageElevator(true,false,false,true,false,0.5);
-				PositionForTarget(true);
+				PositionForTarget(LINING_UP_IN_AUTONOMOUS);
 				//if target_locked is true (or time > 1.0) push the catapult fire (and force_shoot) and wait 2 second before going to AUTONOMOUS_DONE
 				ManageCatapult(true, false, true);
 				autonomousState = AUTONOMOUS_REARMING_THIRD_SHOT;
@@ -497,7 +500,7 @@ public:
 			case AUTONOMOUS_REARMING_THIRD_SHOT:
 				ManageAppendages(false,false);
 				ManageElevator(true,false,false,true,false,0.5);
-				PositionForTarget(true);
+				PositionForTarget(LINING_UP_IN_AUTONOMOUS);
 				ManageCatapult(false, false, false);
 				if (autonomousTempTimer.Get() > 1.0)
 				{
@@ -509,7 +512,7 @@ public:
 			case AUTONOMOUS_RELOADING_FOR_FOURTH:
 				ManageAppendages(false,false);
 				ManageElevator(true,false,false,true,false,0.5);
-				PositionForTarget(true);
+				PositionForTarget(LINING_UP_IN_AUTONOMOUS);
 				ManageCatapult(false, true, false);
 				if (autonomousTempTimer.Get()> 3.0)
 				{
@@ -522,14 +525,14 @@ public:
 			case AUTONOMOUS_SHOOTING_FOURTH_SHOT:
 				ManageAppendages(false,false);
 				ManageElevator(false,false,false,false,false,0.5);
-				PositionForTarget(true);
+				PositionForTarget(LINING_UP_IN_AUTONOMOUS);
 				ManageCatapult(true, false, true);
 				autonomousState = AUTONOMOUS_DONE;
 				break;
 			case AUTONOMOUS_DONE:
 				ManageAppendages(false,false);
 				ManageElevator(false,false,false,false,false,0.5);
-				PositionForTarget(true);
+				PositionForTarget(LINING_UP_IN_AUTONOMOUS);
 				ManageCatapult(true, false, true);
 				break;
 			}
@@ -563,7 +566,7 @@ public:
 					ManageElevator(false,false,false,false,false,0.5);
 					ManageCatapult(false, false, false);
 					//if you hover over the function name (ie ManageAppendages) you can see what parameters it takes, and determine what they do by their name
-					PositionForTarget(true);
+					PositionForTarget(LINING_UP_IN_AUTONOMOUS);
 					
 					
 					//if targetLocked or autonTempTimer > 5sec goto the next state
@@ -576,7 +579,7 @@ public:
 				case AUTONOMOUS_SHOOTING_FIRST_SHOT:
 					ManageAppendages(false,false);
 					ManageElevator(false,false,false,false,false,0.5);
-					PositionForTarget(true);
+					PositionForTarget(LINING_UP_IN_AUTONOMOUS);
 					//if target_locked is true (or time > 1.0) push the catapult fire (and force_shoot) and reset the autonomousTempTimer
 					if ((targetLocked == true) || (autonomousTempTimer.Get() > 1.0))
 					{
@@ -594,7 +597,7 @@ public:
 					//then let go of the latch button and wait 2 second before going to AUTONOMOUS_RELOADING
 					ManageAppendages(false,false);
 					ManageElevator(false,false,false,false,false,0.5);
-					PositionForTarget(true);
+					PositionForTarget(LINING_UP_IN_AUTONOMOUS);
 					ManageCatapult(false, false, false);
 					if (autonomousTempTimer.Get() > 2.0)
 					{
@@ -605,10 +608,9 @@ public:
 				case AUTONOMOUS_RELOADING:
 					ManageAppendages(false,false);
 					ManageElevator(false,false,false,true,false,0.5);
-					ManageElevator(false,false,false,true,false,0.5);
-					PositionForTarget(true);
+					PositionForTarget(LINING_UP_IN_AUTONOMOUS);
 					ManageCatapult(false, true, false);
-					if (autonomousTempTimer.Get()> 4.0)
+					if (autonomousTempTimer.Get() > 4.0)
 					{
 						ManageCatapult(false, false, false);
 						autonomousTempTimer.Reset();
@@ -620,7 +622,7 @@ public:
 				case AUTONOMOUS_SHOOTING_SECOND_SHOT:
 					ManageAppendages(false,false);
 					ManageElevator(false,false,false,true,false,0.5);
-					PositionForTarget(true);
+					PositionForTarget(LINING_UP_IN_AUTONOMOUS);
 					//if target_locked is true (or time > 1.0) push the catapult fire (and force_shoot) and wait 2 second before going to AUTONOMOUS_DONE
 					if ((targetLocked == true) || (autonomousTempTimer.Get() > 1.0))
 					{
@@ -680,7 +682,7 @@ public:
 				case AUTONOMOUS_DONE:
 					ManageAppendages(false,false);
 					ManageElevator(false,false,false,false,false,0.5);
-					PositionForTarget(true);
+					PositionForTarget(LINING_UP_IN_AUTONOMOUS);
 					ManageCatapult(false, false, false);
 					break;
 				}
@@ -1035,7 +1037,7 @@ public:
 			CATAPULT_PUSHER_EXTENDED(true);
 			CATAPULT_LATCH_EXTENDED(false);
 			if (!catapult_latch)button_released = true;
-			if (state_timer.Get() >= 1.0);
+			if (state_timer.Get() >= 2.0);
 			{
 				state_timer.Reset();
 				catapult_state = CATAPULT_WAITING_LATCH;
@@ -1138,6 +1140,10 @@ public:
 			else if (rotationPID.OnTarget() && (on_target_count > 3))
 			{
 				on_target_count = 0;
+#ifdef DISABLE_RANGE_FINDER
+				state_targeting = TARGETING_ROTATING_FINAL;
+#else
+				
 				#ifdef DISABLE_RANGE_ADJUST_IN_AUTONOMOUS
 				if (m_autoPeriodicLoops != 0)
 				{
@@ -1150,6 +1156,7 @@ public:
 					rangePID.Enable();
 					state_targeting = TARGETING_DRIVING_TO_DISTANCE;
 				}
+#endif
 			}
 			else if (rotationPID.OnTarget())
 			{
