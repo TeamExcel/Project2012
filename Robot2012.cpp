@@ -5,12 +5,22 @@
 #include "ImageProcessing.h"
 #include "customPIDs.h"
 #include "AnalogRangeFinder.h"
+
+//Load a ball after 1.75 seconds and before 4.25 seconds
+//Load the last ball now at 6.0 seconds and before 8.5 seconds
+
 ////////////////////////////////////////////////////////
 // Defines and typedefs
 ////////////////////////////////////////////////////////
 #define ANALOG_OUTPUT_CHANNEL 1		//in 2012 this should be in slot 1 (chan 1), or slot 5 (chan 2)
 #define DIGITAL_OUTPUT_CHANNEL 1	//in 2012 this should be in slot 2 (chan 1), or slot 7 (chan 2)
 #define SOLENOID_OUTPUT_CHANNEL 1	//in 2012 this should be in slot 3 (chan 1), or slot 6 (chan 2)
+
+
+#define ANGLE_POSITION_BASE 0.0
+#define ANGLE_POSITION_TOLERANCE 0.5
+#define DISTANCE_POSITION_BASE 152.0
+#define DISTANCE_POSITION_TOLERANCE 1.0
 
 #define CAMERA_MAX_FPS 10
 #define CAMERA_BRIGHTNESS_LEVEL 5
@@ -35,12 +45,12 @@
 #define HORIZONTAL_DEGREES_PER_PIXEL (HALF_HORIZONTAL_FIELD_OF_VIEW/CENTER_OF_IMAGE)
 
 
-//#define HALF_VERTICAL_FIELD_OF_VIEW 19.13711F
-//#define TANGENT_OF_HALF_VERTICAL_FIELD_OF_VIEW .347007F
-//#define TARGET_HEIGHT_IN_FEET 1.5F
-//#define IMAGE_HEIGHT_IN_PIXELS 240
-//#define IMAGE_HEIGHT_IN_FEET(target_height_pxls) ((TARGET_HEIGHT_IN_FEET * (IMAGE_HEIGHT_IN_PIXELS / 2)) / target_height_pxls)
-//#define CALCULATE_DISTANCE(target_height_pxls) (IMAGE_HEIGHT_IN_FEET(target_height_pxls)/TANGENT_OF_HALF_VERTICAL_FIELD_OF_VIEW)
+#define HALF_VERTICAL_FIELD_OF_VIEW 19.13711F
+#define TANGENT_OF_HALF_VERTICAL_FIELD_OF_VIEW .347007F
+#define TARGET_HEIGHT_IN_FEET 1.5F
+#define IMAGE_HEIGHT_IN_PIXELS 240
+#define IMAGE_HEIGHT_IN_FEET(target_height_pxls) ((TARGET_HEIGHT_IN_FEET * (IMAGE_HEIGHT_IN_PIXELS / 2)) / target_height_pxls)
+#define CALCULATE_DISTANCE(target_height_pxls) (IMAGE_HEIGHT_IN_FEET(target_height_pxls)/TANGENT_OF_HALF_VERTICAL_FIELD_OF_VIEW)
 
 
 //Controls defines - for new buttons, add a #define here and use it to get the key you want, that way we can change controls easily
@@ -62,6 +72,8 @@
 
 #define BUTTON_LOWER_BRIDGE_RAM() stickLeftDrive.GetTop()
 
+//#define BUTTON_COMBO_SWITCH_AUTONOMOUS() (stickShooter.GetTrigger() && stickLeftDrive.GetTrigger() && stickRightDrive.GetTrigger())
+#define BUTTON_COMBO_SWITCH_AUTONOMOUS() (stickRightDrive.GetTrigger())
 //Kinect defines
 #define KINECT_HEAD_RIGHT() kinectLeft.GetRawButton(1)
 #define KINECT_HEAD_LEFT() kinectLeft.GetRawButton(2)
@@ -109,12 +121,13 @@
 
 //Comment this out to allow range adjusting in autonomous
 #define DISABLE_RANGE_ADJUST_IN_AUTONOMOUS
-//#define ENABLE_FOUR_SHOT_SUPER_AUTONOMOUS
+#define ENABLE_FOUR_SHOT_SUPER_AUTONOMOUS
 #define DISABLE_RANGE_FINDER
 #define LINING_UP_IN_AUTONOMOUS false
 
 
-#define AUTONOMOUS_BACKUP_TIME 4.4
+#define AUTONOMOUS_BACKUP_TIME 4.9
+#define CATAPULT_REARM_TIME 1.75
 //Uncomment this to enable the PID tuning section of code that can help tune PIDs
 //by running code in debug mode and using breakpoints.
 //#define PID_TUNING
@@ -223,7 +236,7 @@ class Robot2012 : public IterativeRobot
 
 	Timer timeInState;
 	Timer timeSinceBoot;
-	Timer autonomousTempTimer;
+	Timer autonomousStateTimer;
 	
 	DriverStation *driverStation;
 	DriverStationLCD *driverStationLCD;
@@ -254,15 +267,21 @@ class Robot2012 : public IterativeRobot
 		AUTONOMOUS_REARMING_THIRD_SHOT,
 		AUTONOMOUS_RELOADING_FOR_FOURTH,
 		AUTONOMOUS_SHOOTING_FOURTH_SHOT,
-#else
+#endif
 		AUTONOMOUS_HITTING_BRIDGE,
 		AUTONOMOUS_WAIT_FOR_TELEOP,
-#endif
 		AUTONOMOUS_DONE
 	}AUTONOMOUS_STATE;
 	
 	AUTONOMOUS_STATE autonomousState;
+	typedef enum
+	{
+		AUTONOMOUS_MODE_TWO_BALL_AND_TIP,
+		AUTONOMOUS_MODE_FOUR_BALL,
+		AUTONOMOUS_MODE_FEED
+	}AUTONOMOUS_MODE_SELECT;
 		
+	AUTONOMOUS_MODE_SELECT autonomousMode;
 public:
 
 	Robot2012(void):
@@ -323,6 +342,9 @@ public:
 		rangePID.SetTolerance(RANGE_PID_TOLERENCE);
 		rangePID.Disable();
 		
+		autonomousMode = AUTONOMOUS_MODE_TWO_BALL_AND_TIP;
+				
+		
 		printf("Robot2012 Constructor Completed\n");
 	}
 	
@@ -350,6 +372,9 @@ public:
 		compressor.Stop();
 		myRobot.SetSafetyEnabled(false);
 		ManageCatapult(false,false,false);
+
+		autonomousMode = AUTONOMOUS_MODE_TWO_BALL_AND_TIP;
+		
 	}
 
 	void AutonomousInit(void) 
@@ -361,8 +386,8 @@ public:
 		timeInState.Start();
 		compressor.Start();
 		autonomousState = AUTONOMOUS_LINING_UP_SHOT;
-		autonomousTempTimer.Reset();
-		autonomousTempTimer.Start();
+		autonomousStateTimer.Reset();
+		autonomousStateTimer.Start();
 		myRobot.SetSafetyEnabled(true);
 	}
 
@@ -382,6 +407,86 @@ public:
 	void DisabledPeriodic(void)  
 	{
 		m_disabledPeriodicLoops++;
+		CameraInitialize();
+		AxisCamera &camera = AxisCamera::GetInstance("10.24.74.11");
+		if (camera.IsFreshImage() == true)
+		{
+			ColorImage *colorImage = new ColorImage(IMAQ_IMAGE_HSL);
+			if (colorImage == (void *)0)
+				return;
+			camera.GetImage(colorImage);
+			//TODO Print to the LCD as well
+			if (DetermineTargetPosition(colorImage) == 0)
+			{
+				driverStationLCD->PrintfLine((DriverStationLCD::Line) 1, "Camera is working");
+				if ((angleToTurn > (ANGLE_POSITION_BASE - DISTANCE_POSITION_TOLERANCE)) && 
+					(angleToTurn < (ANGLE_POSITION_BASE + DISTANCE_POSITION_TOLERANCE)) &&
+					(distanceToTarget > (DISTANCE_POSITION_BASE - DISTANCE_POSITION_TOLERANCE)) && 
+					(distanceToTarget < (DISTANCE_POSITION_BASE + DISTANCE_POSITION_TOLERANCE)))
+					
+				{
+					SetRIOUserLED(1);
+					driverStationLCD->PrintfLine((DriverStationLCD::Line) 2, "And it's ON target");
+				}
+				else
+				{
+					SetRIOUserLED(0);
+					driverStationLCD->PrintfLine((DriverStationLCD::Line) 2, "And it's OFF target");
+				}
+			}
+			else
+			{
+				SetRIOUserLED(0);
+				driverStationLCD->PrintfLine((DriverStationLCD::Line) 2, "And it's OFF target");
+			}
+			delete colorImage;
+		}
+		
+		static Timer button_combo_timer;
+		if (BUTTON_COMBO_SWITCH_AUTONOMOUS() == true)
+		{
+			button_combo_timer.Start();
+		}
+		else
+		{
+			button_combo_timer.Reset();
+			button_combo_timer.Stop();
+		}
+		
+		if (button_combo_timer.Get() > 3.00)
+		{
+			button_combo_timer.Reset();
+			switch (autonomousMode)
+			{
+			case AUTONOMOUS_MODE_TWO_BALL_AND_TIP:
+				autonomousMode = AUTONOMOUS_MODE_FOUR_BALL;
+				break;
+			case AUTONOMOUS_MODE_FOUR_BALL:
+				autonomousMode = AUTONOMOUS_MODE_FEED;
+				break;
+			case AUTONOMOUS_MODE_FEED:
+				autonomousMode = AUTONOMOUS_MODE_TWO_BALL_AND_TIP;
+				break;
+			}
+		}
+		
+	
+		
+		//TODO look for joystick buttons instead of this switch
+		switch (autonomousMode)
+		{
+		default:
+		case AUTONOMOUS_MODE_TWO_BALL_AND_TIP:
+			driverStationLCD->PrintfLine((DriverStationLCD::Line) 3, "Using 2 ball and tip bridge auton");
+			break;
+		case AUTONOMOUS_MODE_FOUR_BALL:
+			driverStationLCD->PrintfLine((DriverStationLCD::Line) 3, "Using 4 ball autonomous");
+			break;
+		case AUTONOMOUS_MODE_FEED:
+			driverStationLCD->PrintfLine((DriverStationLCD::Line) 3, "Autonomous Feeding balls");
+			break;
+		}
+		driverStationLCD->UpdateLCD();
 	}
 
 	void AutonomousPeriodic(void) 
@@ -398,8 +503,9 @@ public:
 		CameraInitialize();
 
 		
-		#ifdef ENABLE_FOUR_SHOT_SUPER_AUTONOMOUS
-		autonomousTempTimer.Start(); //we call this to make sure the timer stays running whenever we are autoshooting.
+		if (autonomousMode == AUTONOMOUS_MODE_FOUR_BALL)
+		{
+			autonomousStateTimer.Start(); //we call this to make sure the timer stays running whenever we are autoshooting.
 			
 			//Depending on the current autonomousState, we run one of the following cases (this is called a switch case statement)
 			switch (autonomousState)
@@ -416,9 +522,9 @@ public:
 				
 				
 				//if targetLocked or autonTempTimer > 5sec goto the next state
-				if ((autonomousTempTimer.Get() > 2.0))
+				if ((autonomousStateTimer.Get() > 2.0))
 				{
-					autonomousTempTimer.Reset();
+					autonomousStateTimer.Reset();
 					autonomousState = AUTONOMOUS_SHOOTING_FIRST_SHOT;
 				}
 				break;
@@ -437,26 +543,27 @@ public:
 				ManageElevator(true,false,false,true,false,0.5);	//bring ball 2 to scoring position
 				PositionForTarget(LINING_UP_IN_AUTONOMOUS);
 				ManageCatapult(false, false, false);
-				if (autonomousTempTimer.Get() > 1.0)
+				if (autonomousStateTimer.Get() > CATAPULT_REARM_TIME)
 				{
-					autonomousTempTimer.Reset();
+					autonomousStateTimer.Reset();
 					autonomousState = AUTONOMOUS_RELOADING;
 				}
 				break;
-			//Cumulative time: 1.0
+			//Cumulative time: 1.75
+			//Load a ball after 1.75 seconds and before 4.25 seconds
 			case AUTONOMOUS_RELOADING:
 				ManageAppendages(false,false);
 				ManageElevator(false,false,false,true,false,0.5);
 				PositionForTarget(LINING_UP_IN_AUTONOMOUS);
 				ManageCatapult(false, true, false);
-				if (autonomousTempTimer.Get()> 2.5)
+				if (autonomousStateTimer.Get()> 2.5)
 				{
 					ManageCatapult(false, false, false);
-					autonomousTempTimer.Reset();
+					autonomousStateTimer.Reset();
 					autonomousState = AUTONOMOUS_SHOOTING_SECOND_SHOT;
 				}
 				break;
-			//Cumulative time: 3.5
+			//Cumulative time: 4.25
 			case AUTONOMOUS_SHOOTING_SECOND_SHOT:
 				ManageAppendages(false,false);
 				ManageElevator(true,false,false,true,false,0.5);
@@ -465,32 +572,33 @@ public:
 				ManageCatapult(true, false, true);
 				autonomousState = AUTONOMOUS_REARMING_SECOND_SHOT;
 				break;
-			//Cumulative time: 3.51
+			//Cumulative time: 4.26
 			case AUTONOMOUS_REARMING_SECOND_SHOT:
 				ManageAppendages(false,false);
 				ManageElevator(true,false,false,true,false,0.5);
 				PositionForTarget(LINING_UP_IN_AUTONOMOUS);
 				ManageCatapult(false, false, false);
-				if (autonomousTempTimer.Get() > 1.0)
+				if (autonomousStateTimer.Get() > CATAPULT_REARM_TIME)
 				{
-					autonomousTempTimer.Reset();
-					autonomousState = AUTONOMOUS_RELOADING;
+					autonomousStateTimer.Reset();
+					autonomousState = AUTONOMOUS_RELOADING_FOR_THIRD;
 				}
 				break;
-			//Cumulative time: 4.5
+			//Cumulative time: 6.0
+			//Load the last ball now at 6.0 seconds and before 8.5 seconds
 			case AUTONOMOUS_RELOADING_FOR_THIRD:
 				ManageAppendages(false,false);
 				ManageElevator(false,false,false,true,false,0.5);
 				PositionForTarget(LINING_UP_IN_AUTONOMOUS);
 				ManageCatapult(false, true, false);
-				if (autonomousTempTimer.Get()> 2.5)
+				if (autonomousStateTimer.Get()> 2.5)
 				{
 					ManageCatapult(false, false, false);
-					autonomousTempTimer.Reset();
-					autonomousState = AUTONOMOUS_SHOOTING_SECOND_SHOT;
+					autonomousStateTimer.Reset();
+					autonomousState = AUTONOMOUS_SHOOTING_THIRD_SHOT;
 				}
 				break;
-			//Cumulative time: 7.0
+			//Cumulative time: 8.5
 			case AUTONOMOUS_SHOOTING_THIRD_SHOT:
 				ManageAppendages(false,false);
 				ManageElevator(true,false,false,true,false,0.5);
@@ -499,32 +607,32 @@ public:
 				ManageCatapult(true, false, true);
 				autonomousState = AUTONOMOUS_REARMING_THIRD_SHOT;
 				break;
-			//Cumulative time: 7.01
+			//Cumulative time: 8.51
 			case AUTONOMOUS_REARMING_THIRD_SHOT:
 				ManageAppendages(false,false);
 				ManageElevator(true,false,false,true,false,0.5);
 				PositionForTarget(LINING_UP_IN_AUTONOMOUS);
 				ManageCatapult(false, false, false);
-				if (autonomousTempTimer.Get() > 1.0)
+				if (autonomousStateTimer.Get() > CATAPULT_REARM_TIME)
 				{
-					autonomousTempTimer.Reset();
-					autonomousState = AUTONOMOUS_RELOADING;
+					autonomousStateTimer.Reset();
+					autonomousState = AUTONOMOUS_RELOADING_FOR_FOURTH;
 				}
 				break;
-			//Cumulative time: 8.0
+			//Cumulative time: 10.25
 			case AUTONOMOUS_RELOADING_FOR_FOURTH:
 				ManageAppendages(false,false);
 				ManageElevator(false,false,false,true,false,0.5);
 				PositionForTarget(LINING_UP_IN_AUTONOMOUS);
 				ManageCatapult(false, true, false);
-				if (autonomousTempTimer.Get() > 2.5)
+				if (autonomousStateTimer.Get() > 2.5)
 				{
 					ManageCatapult(false, false, false);
-					autonomousTempTimer.Reset();
-					autonomousState = AUTONOMOUS_SHOOTING_SECOND_SHOT;
+					autonomousStateTimer.Reset();
+					autonomousState = AUTONOMOUS_SHOOTING_FOURTH_SHOT;
 				}
 				break;
-			//Cumulative time 10.5
+			//Cumulative time 12.75
 			case AUTONOMOUS_SHOOTING_FOURTH_SHOT:
 				ManageAppendages(false,false);
 				ManageElevator(false,false,false,false,false,0.5);
@@ -532,6 +640,7 @@ public:
 				ManageCatapult(true, false, true);
 				autonomousState = AUTONOMOUS_DONE;
 				break;
+			default:
 			case AUTONOMOUS_DONE:
 				ManageAppendages(false,false);
 				ManageElevator(false,false,false,false,false,0.5);
@@ -539,7 +648,9 @@ public:
 				ManageCatapult(true, false, true);
 				break;
 			}
-		#else
+		}
+		else if (autonomousMode == AUTONOMOUS_MODE_TWO_BALL_AND_TIP)
+		{
 			//if there is a kinect present, and it sees somebody, use the kinect from here on in
 			if (kinect != (void *) 0)
 			{
@@ -557,7 +668,7 @@ public:
 			//if the kinect isnt being used or the kinect autoshoot button is button is being pressed, and we haven't finished shooting
 			if (((useKinect == false) || (kinectAutonomous == true)) && (autonomousState != AUTONOMOUS_DONE))
 			{
-				autonomousTempTimer.Start(); //we call this to make sure the timer stays running whenever we are autoshooting.
+				autonomousStateTimer.Start(); //we call this to make sure the timer stays running whenever we are autoshooting.
 				
 				//Depending on the current autonomousState, we run one of the following cases (this is called a switch case statement)
 				switch (autonomousState)
@@ -573,9 +684,9 @@ public:
 					
 					
 					//if targetLocked or autonTempTimer > 5sec goto the next state
-					if ((targetLocked == true) || (autonomousTempTimer.Get() > 5.0) || (LINING_UP_IN_AUTONOMOUS == false))
+					if ((targetLocked == true) || (autonomousStateTimer.Get() > 5.0) || (LINING_UP_IN_AUTONOMOUS == false))
 					{
-						autonomousTempTimer.Reset();
+						autonomousStateTimer.Reset();
 						autonomousState = AUTONOMOUS_SHOOTING_FIRST_SHOT;
 					}
 					break;
@@ -583,11 +694,11 @@ public:
 					ManageAppendages(false,false);
 					ManageElevator(false,false,false,false,false,0.5);
 					PositionForTarget(LINING_UP_IN_AUTONOMOUS);
-					//if target_locked is true (or time > 1.0) push the catapult fire (and force_shoot) and reset the autonomousTempTimer
-					if ((targetLocked == true) || (autonomousTempTimer.Get() > 1.0) || (LINING_UP_IN_AUTONOMOUS == false))
+					//if target_locked is true (or time > 1.0) push the catapult fire (and force_shoot) and reset the autonomousStateTimer
+					if ((targetLocked == true) || (autonomousStateTimer.Get() > 1.0) || (LINING_UP_IN_AUTONOMOUS == false))
 					{
 						ManageCatapult(true, false, true);
-						autonomousTempTimer.Reset();
+						autonomousStateTimer.Reset();
 						autonomousState = AUTONOMOUS_REARMING_FIRST_SHOT;
 					}
 					else
@@ -602,9 +713,9 @@ public:
 					ManageElevator(false,false,false,false,false,0.5);
 					PositionForTarget(LINING_UP_IN_AUTONOMOUS);
 					ManageCatapult(false, false, false);
-					if (autonomousTempTimer.Get() > 2.0)
+					if (autonomousStateTimer.Get() > 2.0)
 					{
-						autonomousTempTimer.Reset();
+						autonomousStateTimer.Reset();
 						autonomousState = AUTONOMOUS_RELOADING;
 					}
 					break;
@@ -613,10 +724,10 @@ public:
 					ManageElevator(false,false,false,true,false,0.5);
 					PositionForTarget(LINING_UP_IN_AUTONOMOUS);
 					ManageCatapult(false, true, false);
-					if (autonomousTempTimer.Get() > 4.0)
+					if (autonomousStateTimer.Get() > 4.0)
 					{
 						ManageCatapult(false, false, false);
-						autonomousTempTimer.Reset();
+						autonomousStateTimer.Reset();
 						autonomousState = AUTONOMOUS_SHOOTING_SECOND_SHOT;
 					}
 					//push the latch button to lock the arm in place and retract the pusher
@@ -627,10 +738,10 @@ public:
 					ManageElevator(false,false,false,true,false,0.5);
 					PositionForTarget(LINING_UP_IN_AUTONOMOUS);
 					//if target_locked is true (or time > 1.0) push the catapult fire (and force_shoot) and wait 2 second before going to AUTONOMOUS_DONE
-					if ((targetLocked == true) || (autonomousTempTimer.Get() > 2.0))
+					if ((targetLocked == true) || (autonomousStateTimer.Get() > 1.0))
 					{
 						ManageCatapult(true, false, true);
-						autonomousTempTimer.Reset();
+						autonomousStateTimer.Reset();
 						if (useKinect == true)
 						{
 							autonomousState = AUTONOMOUS_DONE;
@@ -650,13 +761,13 @@ public:
 					ManageElevator(true,false,false,false,false,0.5);
 					PositionForTarget(false);
 					ManageCatapult(false, false, false);
-					if (autonomousTempTimer.Get() > AUTONOMOUS_BACKUP_TIME)
+					if (autonomousStateTimer.Get() > AUTONOMOUS_BACKUP_TIME)
 					{
-						autonomousTempTimer.Reset();
+						autonomousStateTimer.Reset();
 						myRobot.TankDrive(0.0,0.0);
 						autonomousState = AUTONOMOUS_WAIT_FOR_TELEOP;
 					}
-					else if (autonomousTempTimer.Get() > 0.5)
+					else if (autonomousStateTimer.Get() > 1.0)
 					{
 						myRobot.TankDrive(-.5,-.5);
 					}
@@ -689,8 +800,8 @@ public:
 				{
 					autonomousState = AUTONOMOUS_LINING_UP_SHOT; //reset the autonomous state if the kinect takes control;
 				}
-				autonomousTempTimer.Stop();
-				autonomousTempTimer.Reset();
+				autonomousStateTimer.Stop();
+				autonomousStateTimer.Reset();
 				myRobot.TankDrive(kinectLeft.GetY() * 0.7, kinectRight.GetY() * 0.7);
 				//add code to bind each kinectStick button to each action we want to be able to do in autonomous
 				//ManageAppendages(KINECT_RIGHT_LEG_BACK(),false);
@@ -702,9 +813,20 @@ public:
 				ManageCatapult(false, false, false);
 				
 			}
-		#endif
-		
-		
+		}		
+		else if (autonomousMode == AUTONOMOUS_MODE_FEED)
+		{
+			autonomousStateTimer.Start();
+			
+			if (autonomousStateTimer.Get() > 3.5)
+			{
+				ManageElevator(false,true,false,true,false,0.0);
+			}
+			else if (autonomousStateTimer.Get() > 1.0)
+			{
+				ManageElevator(false,true,false,false,false,0.0);
+			}
+		}
 	}
 
 	
@@ -804,11 +926,12 @@ public:
 			int centerOfMassX = topParticlePtr->center_mass_x;
 			
 			angleToTurn = (centerOfMassX - CENTER_OF_IMAGE) * HORIZONTAL_DEGREES_PER_PIXEL;
+			angleToTurn = ((-angleToTurn) + ROTATION_PID_SETPOINT_OFFSET);
 			
-			//distanceToTarget = CALCULATE_DISTANCE(topParticlePtr->boundingRect.height);
+			distanceToTarget = 12 * CALCULATE_DISTANCE(topParticlePtr->boundingRect.height);
 
 			driverStationLCD->PrintfLine((DriverStationLCD::Line) 0, "Angle to turn: %.5f", -angleToTurn);
-			//driverStationLCD->PrintfLine((DriverStationLCD::Line) 1, "Distance: %.5f", distanceToTarget);
+			driverStationLCD->PrintfLine((DriverStationLCD::Line) 4, "Range to target: %.5f", distanceToTarget);
 			driverStationLCD->UpdateLCD();
 
 			#ifdef PID_TUNING
@@ -820,7 +943,7 @@ public:
 				rotationPID.SetPID(p,i,d);
 				
 				rotationPID.SetTolerance(tol_angle);
-				rotationPID.SetSetpoint((-angleToTurn) + set_angle);
+				rotationPID.SetSetpoint(angleToTurn);
 				
 				static float tol_range = RANGE_PID_TOLERENCE;
 				static float set_range = RANGE_PID_SETPOINT;
@@ -831,8 +954,10 @@ public:
 				rangePID.SetTolerance(tol_range);
 				rangePID.SetSetpoint(set_range);
 			#else
-			rotationPID.SetSetpoint((-angleToTurn) + ROTATION_PID_SETPOINT_OFFSET);
+			rotationPID.SetSetpoint(angleToTurn);
 			#endif
+			
+			
 		}	
 		else
 		{	
@@ -1045,7 +1170,7 @@ public:
 			CATAPULT_PUSHER_EXTENDED(true);
 			CATAPULT_LATCH_EXTENDED(false);
 			if (!catapult_latch)button_released = true;
-			if (state_timer.Get() >= 2.0);
+			if (state_timer.Get() >= CATAPULT_REARM_TIME);
 			{
 				state_timer.Reset();
 				catapult_state = CATAPULT_WAITING_LATCH;
@@ -1104,7 +1229,7 @@ public:
 		
 		static TARGETING_STATE state_targeting = TARGETING_IDLE;
 		driverStationLCD->PrintfLine((DriverStationLCD::Line) 1, "Angle Turned: %f", gyroscope.GetAngle());
-		driverStationLCD->PrintfLine((DriverStationLCD::Line) 4, "Range to target: %f", rangeFinder.GetRangeInches());
+		//driverStationLCD->PrintfLine((DriverStationLCD::Line) 4, "Range to target: %f", rangeFinder.GetRangeInches());
 		driverStationLCD->PrintfLine((DriverStationLCD::Line) 5, "Autoposition State: %d", state_targeting);
 		driverStationLCD->UpdateLCD();
 		
