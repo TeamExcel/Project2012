@@ -94,9 +94,9 @@
 
 
 //PID Parameters
-#define ROTATION_PID_PROPORTION 0.18
-#define ROTATION_PID_INTEGRAL 0.03
-#define ROTATION_PID_DERIVATIVE 0.07
+#define ROTATION_PID_PROPORTION 0.26
+#define ROTATION_PID_INTEGRAL 0.07
+#define ROTATION_PID_DERIVATIVE 0.36
 
 #define ROTATION_PID_MIN_INPUT -30.0
 #define ROTATION_PID_MAX_INPUT 30.0
@@ -105,7 +105,7 @@
 
 #define ROTATION_PID_TOLERENCE_FIRST 2.50
 #define ROTATION_PID_TOLERENCE_LAST 0.50
-#define ROTATION_PID_SETPOINT_OFFSET -3.9 //negative adjusts to the right
+#define ROTATION_PID_SETPOINT_OFFSET -1.0 //negative adjusts to the right
 
 #define RANGE_PID_PROPORTION 0.02
 #define RANGE_PID_INTEGRAL 0.0005
@@ -127,7 +127,7 @@
 
 
 #define AUTONOMOUS_BACKUP_TIME 4.9
-#define CATAPULT_REARM_TIME 1.75
+#define CATAPULT_REARM_TIME 2.25
 //Uncomment this to enable the PID tuning section of code that can help tune PIDs
 //by running code in debug mode and using breakpoints.
 //#define PID_TUNING
@@ -713,7 +713,7 @@ public:
 					ManageElevator(false,false,false,false,false,0.5);
 					PositionForTarget(LINING_UP_IN_AUTONOMOUS);
 					ManageCatapult(false, false, false);
-					if (autonomousStateTimer.Get() > 2.0)
+					if (autonomousStateTimer.Get() > CATAPULT_REARM_TIME)
 					{
 						autonomousStateTimer.Reset();
 						autonomousState = AUTONOMOUS_RELOADING;
