@@ -31,6 +31,7 @@
 #define FAST_TURN 0.40F
 
 #define ELEVATOR_SPEED_BOTTOM 0.6F
+#define ELEVATOR_SPEED_BOTTOM_SLOW 0.3F
 #define ELEVATOR_SPEED_TOP 1.0F
 
 
@@ -65,7 +66,7 @@
 #define BUTTON_CATAPULT_SHOOT() stickShooter.GetTrigger()
 #define BUTTON_CATAPULT_LATCH() stickShooter.GetTrigger()
 #define BUTTON_CATAPULT_FORCE_SHOOT() stickShooter.GetRawButton(10)
-#define THROTTLE_ELEVATORS() (1.0)
+#define THROTTLE_TOP_ROLLER() (0.85)
 
 #define BUTTON_DUMPER_RAMP_EXTEND() stickShooter.GetRawButton(9)
 #define BUTTON_DUMPER_ROLLER() stickShooter.GetRawButton(11)
@@ -126,8 +127,9 @@
 #define LINING_UP_IN_AUTONOMOUS false
 
 
-#define AUTONOMOUS_BACKUP_TIME 4.9
-#define CATAPULT_REARM_TIME 2.25
+#define AUTONOMOUS_BACKUP_TIME 5.4
+#define CATAPULT_REARM_TIME 1.90
+#define CATAPULT_RELOAD_TIME_FOUR_BALL 2.5
 //Uncomment this to enable the PID tuning section of code that can help tune PIDs
 //by running code in debug mode and using breakpoints.
 //#define PID_TUNING
@@ -532,7 +534,7 @@ public:
 			//Cumulative time: 0.0
 			case AUTONOMOUS_SHOOTING_FIRST_SHOT:
 				ManageAppendages(false,false);
-				ManageElevator(false,false,false,false,false,0.5);
+				ManageElevator(false,false,false,false,false,0.5,false);
 				PositionForTarget(LINING_UP_IN_AUTONOMOUS);
 				ManageCatapult(true, false, true);
 				autonomousState = AUTONOMOUS_REARMING_FIRST_SHOT;
@@ -540,7 +542,7 @@ public:
 			//Cumulative time: 0.01
 			case AUTONOMOUS_REARMING_FIRST_SHOT:
 				ManageAppendages(false,false);
-				ManageElevator(true,false,false,true,false,0.5);	//bring ball 2 to scoring position
+				ManageElevator(true,false,false,true,false,0.5,false);	//bring ball 2 to scoring position
 				PositionForTarget(LINING_UP_IN_AUTONOMOUS);
 				ManageCatapult(false, false, false);
 				if (autonomousStateTimer.Get() > CATAPULT_REARM_TIME)
@@ -549,33 +551,40 @@ public:
 					autonomousState = AUTONOMOUS_RELOADING;
 				}
 				break;
-			//Cumulative time: 1.75
-			//Load a ball after 1.75 seconds and before 4.25 seconds
+			//Cumulative time: 1.9
+			//Load a ball after 1.90 seconds and before 4.4 seconds (2.9 ideal)
 			case AUTONOMOUS_RELOADING:
 				ManageAppendages(false,false);
-				ManageElevator(false,false,false,true,false,0.5);
+				if (autonomousStateTimer.Get() > 1.0)
+				{
+					ManageElevator(false,false,false,true,false,0.5,true);
+				}
+				else
+				{
+					ManageElevator(false,false,false,true,false,0.5,false);
+				}
 				PositionForTarget(LINING_UP_IN_AUTONOMOUS);
 				ManageCatapult(false, true, false);
-				if (autonomousStateTimer.Get()> 2.5)
+				if (autonomousStateTimer.Get()> CATAPULT_RELOAD_TIME_FOUR_BALL)
 				{
 					ManageCatapult(false, false, false);
 					autonomousStateTimer.Reset();
 					autonomousState = AUTONOMOUS_SHOOTING_SECOND_SHOT;
 				}
 				break;
-			//Cumulative time: 4.25
+			//Cumulative time: 4.4
 			case AUTONOMOUS_SHOOTING_SECOND_SHOT:
 				ManageAppendages(false,false);
-				ManageElevator(true,false,false,true,false,0.5);
+				ManageElevator(true,false,false,true,false,0.5,false);
 				PositionForTarget(LINING_UP_IN_AUTONOMOUS);
 				//if target_locked is true (or time > 1.0) push the catapult fire (and force_shoot) and wait 2 second before going to AUTONOMOUS_DONE
 				ManageCatapult(true, false, true);
 				autonomousState = AUTONOMOUS_REARMING_SECOND_SHOT;
 				break;
-			//Cumulative time: 4.26
+			//Cumulative time: 4.41
 			case AUTONOMOUS_REARMING_SECOND_SHOT:
 				ManageAppendages(false,false);
-				ManageElevator(true,false,false,true,false,0.5);
+				ManageElevator(true,false,false,true,false,0.5,false);
 				PositionForTarget(LINING_UP_IN_AUTONOMOUS);
 				ManageCatapult(false, false, false);
 				if (autonomousStateTimer.Get() > CATAPULT_REARM_TIME)
@@ -584,14 +593,21 @@ public:
 					autonomousState = AUTONOMOUS_RELOADING_FOR_THIRD;
 				}
 				break;
-			//Cumulative time: 6.0
-			//Load the last ball now at 6.0 seconds and before 8.5 seconds
+			//Cumulative time: 6.31
+			//Load the last ball now at 6.31 seconds and before 8.8 seconds 
 			case AUTONOMOUS_RELOADING_FOR_THIRD:
 				ManageAppendages(false,false);
-				ManageElevator(false,false,false,true,false,0.5);
+				if (autonomousStateTimer.Get() > 1.0)
+				{
+					ManageElevator(false,false,false,true,false,0.5,true);
+				}
+				else
+				{
+					ManageElevator(false,false,false,true,false,0.5,false);
+				}
 				PositionForTarget(LINING_UP_IN_AUTONOMOUS);
 				ManageCatapult(false, true, false);
-				if (autonomousStateTimer.Get()> 2.5)
+				if (autonomousStateTimer.Get()> CATAPULT_RELOAD_TIME_FOUR_BALL)
 				{
 					ManageCatapult(false, false, false);
 					autonomousStateTimer.Reset();
@@ -601,7 +617,7 @@ public:
 			//Cumulative time: 8.5
 			case AUTONOMOUS_SHOOTING_THIRD_SHOT:
 				ManageAppendages(false,false);
-				ManageElevator(true,false,false,true,false,0.5);
+				ManageElevator(true,false,false,true,false,0.5,false);
 				PositionForTarget(LINING_UP_IN_AUTONOMOUS);
 				//if target_locked is true (or time > 1.0) push the catapult fire (and force_shoot) and wait 2 second before going to AUTONOMOUS_DONE
 				ManageCatapult(true, false, true);
@@ -610,7 +626,7 @@ public:
 			//Cumulative time: 8.51
 			case AUTONOMOUS_REARMING_THIRD_SHOT:
 				ManageAppendages(false,false);
-				ManageElevator(true,false,false,true,false,0.5);
+				ManageElevator(true,false,false,true,false,0.5,false);
 				PositionForTarget(LINING_UP_IN_AUTONOMOUS);
 				ManageCatapult(false, false, false);
 				if (autonomousStateTimer.Get() > CATAPULT_REARM_TIME)
@@ -622,10 +638,17 @@ public:
 			//Cumulative time: 10.25
 			case AUTONOMOUS_RELOADING_FOR_FOURTH:
 				ManageAppendages(false,false);
-				ManageElevator(false,false,false,true,false,0.5);
+				if (autonomousStateTimer.Get() > 1.0)
+				{
+					ManageElevator(false,false,false,true,false,0.5,true);
+				}
+				else
+				{
+					ManageElevator(false,false,false,true,false,0.5,false);
+				}
 				PositionForTarget(LINING_UP_IN_AUTONOMOUS);
 				ManageCatapult(false, true, false);
-				if (autonomousStateTimer.Get() > 2.5)
+				if (autonomousStateTimer.Get() > CATAPULT_RELOAD_TIME_FOUR_BALL)
 				{
 					ManageCatapult(false, false, false);
 					autonomousStateTimer.Reset();
@@ -635,7 +658,7 @@ public:
 			//Cumulative time 12.75
 			case AUTONOMOUS_SHOOTING_FOURTH_SHOT:
 				ManageAppendages(false,false);
-				ManageElevator(false,false,false,false,false,0.5);
+				ManageElevator(false,false,false,false,false,0.5,false);
 				PositionForTarget(LINING_UP_IN_AUTONOMOUS);
 				ManageCatapult(true, false, true);
 				autonomousState = AUTONOMOUS_DONE;
@@ -643,7 +666,7 @@ public:
 			default:
 			case AUTONOMOUS_DONE:
 				ManageAppendages(false,false);
-				ManageElevator(false,false,false,false,false,0.5);
+				ManageElevator(false,false,false,false,false,0.5,false);
 				PositionForTarget(LINING_UP_IN_AUTONOMOUS);
 				ManageCatapult(true, false, true);
 				break;
@@ -677,7 +700,7 @@ public:
 					//in this state set all the managers to off accept the targeter
 	
 					ManageAppendages(false,false);
-					ManageElevator(false,false,false,false,false,0.5);
+					ManageElevator(false,false,false,false,false,0.5,false);
 					ManageCatapult(false, false, false);
 					//if you hover over the function name (ie ManageAppendages) you can see what parameters it takes, and determine what they do by their name
 					PositionForTarget(LINING_UP_IN_AUTONOMOUS);
@@ -692,7 +715,7 @@ public:
 					break;
 				case AUTONOMOUS_SHOOTING_FIRST_SHOT:
 					ManageAppendages(false,false);
-					ManageElevator(false,false,false,false,false,0.5);
+					ManageElevator(false,false,false,false,false,0.5,false);
 					PositionForTarget(LINING_UP_IN_AUTONOMOUS);
 					//if target_locked is true (or time > 1.0) push the catapult fire (and force_shoot) and reset the autonomousStateTimer
 					if ((targetLocked == true) || (autonomousStateTimer.Get() > 1.0) || (LINING_UP_IN_AUTONOMOUS == false))
@@ -710,7 +733,7 @@ public:
 				case AUTONOMOUS_REARMING_FIRST_SHOT:
 					//then let go of the latch button and wait 2 second before going to AUTONOMOUS_RELOADING
 					ManageAppendages(false,false);
-					ManageElevator(false,false,false,false,false,0.5);
+					ManageElevator(false,false,false,false,false,0.5,false);
 					PositionForTarget(LINING_UP_IN_AUTONOMOUS);
 					ManageCatapult(false, false, false);
 					if (autonomousStateTimer.Get() > CATAPULT_REARM_TIME)
@@ -721,7 +744,7 @@ public:
 					break;
 				case AUTONOMOUS_RELOADING:
 					ManageAppendages(false,false);
-					ManageElevator(false,false,false,true,false,0.5);
+					ManageElevator(false,false,false,true,false,0.5,false);
 					PositionForTarget(LINING_UP_IN_AUTONOMOUS);
 					ManageCatapult(false, true, false);
 					if (autonomousStateTimer.Get() > 4.0)
@@ -735,7 +758,7 @@ public:
 					break;
 				case AUTONOMOUS_SHOOTING_SECOND_SHOT:
 					ManageAppendages(false,false);
-					ManageElevator(false,false,false,true,false,0.5);
+					ManageElevator(false,false,false,true,false,0.5,false);
 					PositionForTarget(LINING_UP_IN_AUTONOMOUS);
 					//if target_locked is true (or time > 1.0) push the catapult fire (and force_shoot) and wait 2 second before going to AUTONOMOUS_DONE
 					if ((targetLocked == true) || (autonomousStateTimer.Get() > 1.0))
@@ -758,7 +781,7 @@ public:
 					break;
 				case AUTONOMOUS_HITTING_BRIDGE:
 					ManageAppendages(true,false);
-					ManageElevator(true,false,false,false,false,0.5);
+					ManageElevator(true,false,false,false,false,0.5,false);
 					PositionForTarget(false);
 					ManageCatapult(false, false, false);
 					if (autonomousStateTimer.Get() > AUTONOMOUS_BACKUP_TIME)
@@ -778,7 +801,7 @@ public:
 					break;
 				case AUTONOMOUS_WAIT_FOR_TELEOP:
 					ManageAppendages(false,false);
-					ManageElevator(true,false,false,false,false,0.5);
+					ManageElevator(true,false,false,false,false,0.5,false);
 					PositionForTarget(false);
 					ManageCatapult(false, false, false);
 					myRobot.TankDrive(0.0,0.0);
@@ -786,7 +809,7 @@ public:
 				default:
 				case AUTONOMOUS_DONE:
 					ManageAppendages(false,false);
-					ManageElevator(false,false,false,false,false,0.5);
+					ManageElevator(false,false,false,false,false,0.5,false);
 					PositionForTarget(LINING_UP_IN_AUTONOMOUS);
 					ManageCatapult(false, false, false);
 					break;
@@ -808,7 +831,7 @@ public:
 				BRIDGE_RAM_EXTENDED(KINECT_BRIDGE_RAM_EXTEND());
 				ManageElevator((KINECT_ELEVATORS_UP() || KINECT_BRIDGE_RAM_EXTEND()),KINECT_ELEVATORS_DOWN(),
 						KINECT_ELEVATORS_UP(),KINECT_ELEVATORS_DOWN(),
-						KINECT_ELEVATORS_UP(),1.0);
+						KINECT_ELEVATORS_UP(),THROTTLE_TOP_ROLLER(),false);
 				PositionForTarget(false);
 				ManageCatapult(false, false, false);
 				
@@ -820,11 +843,11 @@ public:
 			
 			if (autonomousStateTimer.Get() > 3.5)
 			{
-				ManageElevator(false,true,false,true,false,0.0);
+				ManageElevator(false,true,false,true,false,0.0,false);
 			}
 			else if (autonomousStateTimer.Get() > 1.0)
 			{
-				ManageElevator(false,true,false,false,false,0.0);
+				ManageElevator(false,true,false,false,false,0.0,false);
 			}
 		}
 	}
@@ -848,7 +871,7 @@ public:
 		ManageAppendages(BUTTON_LOWER_BRIDGE_RAM(),BUTTON_DUMPER_RAMP_EXTEND());
 		ManageElevator(BUTTON_ELEVATOR_BOTTOM_UP(), BUTTON_ELEVATOR_BOTTOM_DOWN(), 
 						BUTTON_ELEVATOR_TOP_UP(), BUTTON_ELEVATOR_TOP_DOWN(), 
-						BUTTON_DUMPER_ROLLER(), THROTTLE_ELEVATORS());
+						BUTTON_DUMPER_ROLLER(), THROTTLE_TOP_ROLLER(),false);
 		ManageCatapult(BUTTON_CATAPULT_SHOOT(), BUTTON_CATAPULT_LATCH(), BUTTON_CATAPULT_FORCE_SHOOT());
 
 		PositionForTarget(BUTTON_CAMERA_ALIGN_SHOT_BUTTON());
@@ -1076,7 +1099,7 @@ public:
 		}
 	}
 //#define TEST_ELEVATOR_TIMING
-	void ManageElevator(bool bottom_up, bool bottom_down, bool top_up, bool top_down, bool dumper_roller, float throttle)
+	void ManageElevator(bool bottom_up, bool bottom_down, bool top_up, bool top_down, bool dumper_roller, float throttle, bool bottom_elevator_slow_up)
 	{
 		static Timer elevatorTimer;
 #ifdef TEST_ELEVATOR_TIMING
@@ -1099,6 +1122,11 @@ public:
 		{
 			jaguarElevatorBottom1.Set(ELEVATOR_SPEED_BOTTOM, BOTTOM_ROLLERS_SYNC_GROUP);
 			jaguarElevatorBottom2.Set(ELEVATOR_SPEED_BOTTOM, BOTTOM_ROLLERS_SYNC_GROUP);
+		}
+		else if (bottom_elevator_slow_up)
+		{
+			jaguarElevatorBottom1.Set(-ELEVATOR_SPEED_BOTTOM_SLOW, BOTTOM_ROLLERS_SYNC_GROUP);
+			jaguarElevatorBottom2.Set(-ELEVATOR_SPEED_BOTTOM_SLOW, BOTTOM_ROLLERS_SYNC_GROUP);
 		}
 		else
 		{
