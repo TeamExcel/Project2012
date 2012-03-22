@@ -16,12 +16,16 @@
 #define DIGITAL_OUTPUT_CHANNEL 1	//in 2012 this should be in slot 2 (chan 1), or slot 7 (chan 2)
 #define SOLENOID_OUTPUT_CHANNEL 1	//in 2012 this should be in slot 3 (chan 1), or slot 6 (chan 2)
 
-
-#define AUTONOMOUS_BACKUP_TIME 5.4
 #define CATAPULT_REARM_TIME 1.75
 #define CATAPULT_RELOAD_TIME_FOUR_BALL 1.25
 #define SLOW_PICKUP_DURING_RELOAD_START 0.2
 #define CATAPULT_FIRE_TIME 1.0
+
+#define AUTONOMOUS_BACKUP_SPEED_SLOW -0.5
+#define AUTONOMOUS_BACKUP_SPEED_FAST -0.7
+#define AUTONOMOUS_BACKUP_TIME_SLOW (1.3 + AUTONOMOUS_BACKUP_TIME_FAST)
+#define AUTONOMOUS_BACKUP_TIME_FAST (1.0 + AUTONOMOUS_BACKUP_TIME_WAIT)
+#define AUTONOMOUS_BACKUP_TIME_WAIT 1.0
 //#define CATAPULT_PRELOAD_TIME_FOUR_BALL 0.1  	//How long we turn on the reload roller before the catapult finishes rearming
 //Fire 0.0sec
 //Rearm start 0.0sec
@@ -296,6 +300,7 @@ class Robot2012 : public IterativeRobot
 	{
 		AUTONOMOUS_MODE_TWO_BALL_AND_TIP,
 		AUTONOMOUS_MODE_FOUR_BALL,
+		AUTONOMOUS_MODE_TWO_BALL,
 		AUTONOMOUS_MODE_FEED
 	}AUTONOMOUS_MODE_SELECT;
 		
@@ -480,6 +485,9 @@ public:
 				autonomousMode = AUTONOMOUS_MODE_FOUR_BALL;
 				break;
 			case AUTONOMOUS_MODE_FOUR_BALL:
+				autonomousMode = AUTONOMOUS_MODE_TWO_BALL;
+				break;
+			case AUTONOMOUS_MODE_TWO_BALL:
 				autonomousMode = AUTONOMOUS_MODE_FEED;
 				break;
 			case AUTONOMOUS_MODE_FEED:
@@ -499,6 +507,9 @@ public:
 			break;
 		case AUTONOMOUS_MODE_FOUR_BALL:
 			driverStationLCD->PrintfLine((DriverStationLCD::Line) 3, "Using 4 ball autonomous");
+			break;
+		case AUTONOMOUS_MODE_TWO_BALL:
+			driverStationLCD->PrintfLine((DriverStationLCD::Line) 3, "Using 2 ball NO BRIDGE TIP");
 			break;
 		case AUTONOMOUS_MODE_FEED:
 			driverStationLCD->PrintfLine((DriverStationLCD::Line) 3, "Autonomous Feeding balls");
@@ -703,7 +714,7 @@ public:
 				break;
 			}
 		}
-		else if (autonomousMode == AUTONOMOUS_MODE_TWO_BALL_AND_TIP)
+		else if ((autonomousMode == AUTONOMOUS_MODE_TWO_BALL_AND_TIP) || (autonomousMode == AUTONOMOUS_MODE_TWO_BALL))
 		{
 			//if there is a kinect present, and it sees somebody, use the kinect from here on in
 			if (kinect != (void *) 0)
@@ -796,7 +807,7 @@ public:
 					{
 						ManageCatapult(true, false, true);
 						autonomousStateTimer.Reset();
-						if (useKinect == true)
+						if ((useKinect == true) || (autonomousMode == AUTONOMOUS_MODE_TWO_BALL))
 						{
 							autonomousState = AUTONOMOUS_DONE;
 						}
@@ -815,19 +826,23 @@ public:
 					ManageElevator(true,false,false,false,false,0.5,false);
 					PositionForTarget(false);
 					ManageCatapult(false, false, false);
-					if (autonomousStateTimer.Get() > AUTONOMOUS_BACKUP_TIME)
+					if (autonomousStateTimer.Get() < AUTONOMOUS_BACKUP_TIME_WAIT)
+					{
+						myRobot.TankDrive(0.0,0.0);
+					}
+					else if (autonomousStateTimer.Get() < AUTONOMOUS_BACKUP_TIME_FAST)
+					{
+						myRobot.TankDrive(AUTONOMOUS_BACKUP_SPEED_FAST,AUTONOMOUS_BACKUP_SPEED_FAST);
+					}
+					else if (autonomousStateTimer.Get() < AUTONOMOUS_BACKUP_TIME_SLOW)
+					{
+						myRobot.TankDrive(AUTONOMOUS_BACKUP_SPEED_SLOW,AUTONOMOUS_BACKUP_SPEED_SLOW);
+					}
+					else
 					{
 						autonomousStateTimer.Reset();
 						myRobot.TankDrive(0.0,0.0);
 						autonomousState = AUTONOMOUS_WAIT_FOR_TELEOP;
-					}
-					else if (autonomousStateTimer.Get() > 1.0)
-					{
-						myRobot.TankDrive(-.5,-.5);
-					}
-					else
-					{
-						myRobot.TankDrive(0.0,0.0);
 					}
 					break;
 				case AUTONOMOUS_WAIT_FOR_TELEOP:
