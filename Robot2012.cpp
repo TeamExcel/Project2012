@@ -17,6 +17,21 @@
 #define SOLENOID_OUTPUT_CHANNEL 1	//in 2012 this should be in slot 3 (chan 1), or slot 6 (chan 2)
 
 
+#define AUTONOMOUS_BACKUP_TIME 5.4
+#define CATAPULT_REARM_TIME 1.75
+#define CATAPULT_RELOAD_TIME_FOUR_BALL 1.25
+#define SLOW_PICKUP_DURING_RELOAD_START 0.2
+#define CATAPULT_FIRE_TIME 1.0
+//#define CATAPULT_PRELOAD_TIME_FOUR_BALL 0.1  	//How long we turn on the reload roller before the catapult finishes rearming
+//Fire 0.0sec
+//Rearm start 0.0sec
+//preload CATAPULT_REARM_TIME - CATAPULT_PRELOAD_TIME_FOUR_BALL
+//reloading CATAPULT_REARM_TIME
+//slow ball collect CATAPULT_REARM_TIME + 1.0
+//fire again CATAPULT_REARM_TIME + CATAPULT_RELOAD_TIME_FOUR_BALL 
+
+
+
 #define ANGLE_POSITION_BASE 0.0
 #define ANGLE_POSITION_TOLERANCE 0.5
 #define DISTANCE_POSITION_BASE 152.0
@@ -34,7 +49,8 @@
 #define ELEVATOR_SPEED_BOTTOM_SLOW 0.3F
 #define ELEVATOR_SPEED_TOP 1.0F
 
-
+//
+//stickRightDrive.GetThrottle();
 
 
 #define CENTER_OF_IMAGE 160
@@ -120,19 +136,19 @@
 #define RANGE_PID_SETPOINT 150.0
 #define RANGE_PID_TOLERENCE 4.0
 
+//Uncomment this to enable the PID tuning section of code that can help tune PIDs
+//by running code in debug mode and using breakpoints.
+//#define PID_TUNING
+
+
+
 //Comment this out to allow range adjusting in autonomous
 #define DISABLE_RANGE_ADJUST_IN_AUTONOMOUS
 #define ENABLE_FOUR_SHOT_SUPER_AUTONOMOUS
 #define DISABLE_RANGE_FINDER
 #define LINING_UP_IN_AUTONOMOUS false
+//#define TEST_ELEVATOR_TIMING
 
-
-#define AUTONOMOUS_BACKUP_TIME 5.4
-#define CATAPULT_REARM_TIME 1.90
-#define CATAPULT_RELOAD_TIME_FOUR_BALL 2.5
-//Uncomment this to enable the PID tuning section of code that can help tune PIDs
-//by running code in debug mode and using breakpoints.
-//#define PID_TUNING
 
 //Helper Macros
 #define DUMPER_RAMP_EXTENDED(isExtended) {FlipSolenoids(isExtended, &solenoidDumperRampUp, &solenoidDumperRampDown);}
@@ -534,7 +550,7 @@ public:
 			//Cumulative time: 0.0
 			case AUTONOMOUS_SHOOTING_FIRST_SHOT:
 				ManageAppendages(false,false);
-				ManageElevator(false,false,false,false,false,0.5,false);
+				ManageElevator(false,false,false,false,false,0.5,true);
 				PositionForTarget(LINING_UP_IN_AUTONOMOUS);
 				ManageCatapult(true, false, true);
 				autonomousState = AUTONOMOUS_REARMING_FIRST_SHOT;
@@ -542,7 +558,14 @@ public:
 			//Cumulative time: 0.01
 			case AUTONOMOUS_REARMING_FIRST_SHOT:
 				ManageAppendages(false,false);
-				ManageElevator(true,false,false,true,false,0.5,false);	//bring ball 2 to scoring position
+//				if (autonom_REARM_TIME - CATAPULT_PRELOAD_TIME_FOUR_BALL))
+//				{
+//					ManageElevator(false,false,false,true,false,0.5,false);
+//				}
+//				else
+				{
+					ManageElevator(false,false,false,false,false,0.5,true);
+				}
 				PositionForTarget(LINING_UP_IN_AUTONOMOUS);
 				ManageCatapult(false, false, false);
 				if (autonomousStateTimer.Get() > CATAPULT_REARM_TIME)
@@ -551,11 +574,11 @@ public:
 					autonomousState = AUTONOMOUS_RELOADING;
 				}
 				break;
-			//Cumulative time: 1.9
-			//Load a ball after 1.90 seconds and before 4.4 seconds (2.9 ideal)
+			//Cumulative time: 1.0
+			//Load a ball after 1.0 seconds and before 4.4 seconds (2.9 ideal)
 			case AUTONOMOUS_RELOADING:
 				ManageAppendages(false,false);
-				if (autonomousStateTimer.Get() > 1.0)
+				if (autonomousStateTimer.Get() > SLOW_PICKUP_DURING_RELOAD_START)
 				{
 					ManageElevator(false,false,false,true,false,0.5,true);
 				}
@@ -572,32 +595,36 @@ public:
 					autonomousState = AUTONOMOUS_SHOOTING_SECOND_SHOT;
 				}
 				break;
-			//Cumulative time: 4.4
 			case AUTONOMOUS_SHOOTING_SECOND_SHOT:
 				ManageAppendages(false,false);
-				ManageElevator(true,false,false,true,false,0.5,false);
+				ManageElevator(true,false,false,true,false,0.5,true);
 				PositionForTarget(LINING_UP_IN_AUTONOMOUS);
 				//if target_locked is true (or time > 1.0) push the catapult fire (and force_shoot) and wait 2 second before going to AUTONOMOUS_DONE
 				ManageCatapult(true, false, true);
 				autonomousState = AUTONOMOUS_REARMING_SECOND_SHOT;
 				break;
-			//Cumulative time: 4.41
 			case AUTONOMOUS_REARMING_SECOND_SHOT:
 				ManageAppendages(false,false);
-				ManageElevator(true,false,false,true,false,0.5,false);
 				PositionForTarget(LINING_UP_IN_AUTONOMOUS);
 				ManageCatapult(false, false, false);
+//				if (autonomousStateTimer.Get() > (CATAPULT_REARM_TIME - CATAPULT_PRELOAD_TIME_FOUR_BALL))
+//				{
+//					ManageElevator(false,false,false,true,false,0.5,false);
+//				}
+//				else
+				{
+					ManageElevator(true,false,false,false,false,0.5,false);
+				}
+				
 				if (autonomousStateTimer.Get() > CATAPULT_REARM_TIME)
 				{
 					autonomousStateTimer.Reset();
 					autonomousState = AUTONOMOUS_RELOADING_FOR_THIRD;
 				}
 				break;
-			//Cumulative time: 6.31
-			//Load the last ball now at 6.31 seconds and before 8.8 seconds 
 			case AUTONOMOUS_RELOADING_FOR_THIRD:
 				ManageAppendages(false,false);
-				if (autonomousStateTimer.Get() > 1.0)
+				if (autonomousStateTimer.Get() > SLOW_PICKUP_DURING_RELOAD_START)
 				{
 					ManageElevator(false,false,false,true,false,0.5,true);
 				}
@@ -614,7 +641,6 @@ public:
 					autonomousState = AUTONOMOUS_SHOOTING_THIRD_SHOT;
 				}
 				break;
-			//Cumulative time: 8.5
 			case AUTONOMOUS_SHOOTING_THIRD_SHOT:
 				ManageAppendages(false,false);
 				ManageElevator(true,false,false,true,false,0.5,false);
@@ -623,10 +649,16 @@ public:
 				ManageCatapult(true, false, true);
 				autonomousState = AUTONOMOUS_REARMING_THIRD_SHOT;
 				break;
-			//Cumulative time: 8.51
 			case AUTONOMOUS_REARMING_THIRD_SHOT:
 				ManageAppendages(false,false);
-				ManageElevator(true,false,false,true,false,0.5,false);
+//				if (autonomousStateTimer.Get() > (CATAPULT_REARM_TIME - CATAPULT_PRELOAD_TIME_FOUR_BALL))
+//				{
+//					ManageElevator(false,false,false,true,false,0.5,false);
+//				}
+//				else
+				{
+					ManageElevator(true,false,false,false,false,0.5,false);
+				}
 				PositionForTarget(LINING_UP_IN_AUTONOMOUS);
 				ManageCatapult(false, false, false);
 				if (autonomousStateTimer.Get() > CATAPULT_REARM_TIME)
@@ -635,10 +667,9 @@ public:
 					autonomousState = AUTONOMOUS_RELOADING_FOR_FOURTH;
 				}
 				break;
-			//Cumulative time: 10.25
 			case AUTONOMOUS_RELOADING_FOR_FOURTH:
 				ManageAppendages(false,false);
-				if (autonomousStateTimer.Get() > 1.0)
+				if (autonomousStateTimer.Get() > SLOW_PICKUP_DURING_RELOAD_START)
 				{
 					ManageElevator(false,false,false,true,false,0.5,true);
 				}
@@ -747,7 +778,7 @@ public:
 					ManageElevator(false,false,false,true,false,0.5,false);
 					PositionForTarget(LINING_UP_IN_AUTONOMOUS);
 					ManageCatapult(false, true, false);
-					if (autonomousStateTimer.Get() > 4.0)
+					if (autonomousStateTimer.Get() > CATAPULT_RELOAD_TIME_FOUR_BALL)
 					{
 						ManageCatapult(false, false, false);
 						autonomousStateTimer.Reset();
@@ -1098,7 +1129,7 @@ public:
 			break;
 		}
 	}
-//#define TEST_ELEVATOR_TIMING
+
 	void ManageElevator(bool bottom_up, bool bottom_down, bool top_up, bool top_down, bool dumper_roller, float throttle, bool bottom_elevator_slow_up)
 	{
 		static Timer elevatorTimer;
@@ -1141,9 +1172,8 @@ public:
 		else if (top_down)
 		{
 #ifdef TEST_ELEVATOR_TIMING
-			//Took 2.03
 			elevatorTimer.Start();
-			driverStationLCD->PrintfLine((DriverStationLCD::Line) 3, "Top Timer: %f", elevatorTimer.Get());
+			driverStationLCD->PrintfLine((DriverStationLCD::Line) 3, "Tm:%f spd%f", elevatorTimer.Get(), ELEVATOR_SPEED_TOP);
 #endif
 			jaguarElevatorTop.Set(-ELEVATOR_SPEED_TOP);
 		}
@@ -1235,7 +1265,7 @@ public:
 			CATAPULT_PUSHER_EXTENDED(false);
 			CATAPULT_LATCH_EXTENDED(false);
 			if (!catapult_shoot)button_released = true;
-			if (state_timer.Get() >= 1.0)
+			if (state_timer.Get() >= CATAPULT_FIRE_TIME)
 			{
 				state_timer.Reset();
 				CATAPULT_PUSHER_EXTENDED(true);
