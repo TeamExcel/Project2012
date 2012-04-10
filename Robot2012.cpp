@@ -21,10 +21,10 @@
 #define SLOW_PICKUP_DURING_RELOAD_START 0.2
 #define CATAPULT_FIRE_TIME 1.0
 
-#define AUTONOMOUS_BACKUP_SPEED_SLOW -0.5
+#define AUTONOMOUS_BACKUP_SPEED_SLOW -0.45
 #define AUTONOMOUS_BACKUP_SPEED_FAST -0.7
-#define AUTONOMOUS_BACKUP_TIME_SLOW (1.3 + AUTONOMOUS_BACKUP_TIME_FAST)
-#define AUTONOMOUS_BACKUP_TIME_FAST (1.0 + AUTONOMOUS_BACKUP_TIME_WAIT)
+#define AUTONOMOUS_BACKUP_TIME_SLOW (1.6 + AUTONOMOUS_BACKUP_TIME_FAST)
+#define AUTONOMOUS_BACKUP_TIME_FAST (0.9 + AUTONOMOUS_BACKUP_TIME_WAIT)
 #define AUTONOMOUS_BACKUP_TIME_WAIT 1.0
 //#define CATAPULT_PRELOAD_TIME_FOUR_BALL 0.1  	//How long we turn on the reload roller before the catapult finishes rearming
 //Fire 0.0sec
@@ -86,8 +86,8 @@
 #define BUTTON_CATAPULT_SHOOT() stickShooter.GetTrigger()
 #define BUTTON_CATAPULT_LATCH() stickShooter.GetTrigger()
 #define BUTTON_CATAPULT_FORCE_SHOOT() stickShooter.GetRawButton(10)
-#define THROTTLE_TOP_ROLLER() (0.85)
-
+#define THROTTLE_TOP_ROLLER() (0.70)
+//#define THROTTLE_TOP_ROLLER() ((stickShooter.GetThrottle() + 1) / 2)
 #define BUTTON_DUMPER_RAMP_EXTEND() stickShooter.GetRawButton(9)
 #define BUTTON_DUMPER_ROLLER() stickShooter.GetRawButton(11)
 
@@ -921,6 +921,11 @@ public:
 		ManageCatapult(BUTTON_CATAPULT_SHOOT(), BUTTON_CATAPULT_LATCH(), BUTTON_CATAPULT_FORCE_SHOOT());
 
 		PositionForTarget(BUTTON_CAMERA_ALIGN_SHOT_BUTTON());
+
+		if (BUTTON_DUMPER_ROLLER())
+		{
+			driverStationLCD->PrintfLine((DriverStationLCD::Line) 3, "Roller Throttle: %f", THROTTLE_TOP_ROLLER());
+		}
 		driverStationLCD->UpdateLCD();
 	}
 
@@ -1201,10 +1206,18 @@ public:
 		if (dumper_roller)
 		{
 			victorDumperRoller.Set(throttle);
+			if (compressor.Enabled() == true)
+			{
+				compressor.Stop();
+			}
 		}
 		else
 		{
 			victorDumperRoller.Set(0.0);
+			if (compressor.Enabled() == false)
+			{
+				compressor.Start();
+			}
 		}
 	}
 	
