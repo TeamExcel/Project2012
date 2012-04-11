@@ -10,7 +10,7 @@ GyroControlledTurning::GyroControlledTurning(RobotDrive *controlledRobot)
 void GyroControlledTurning::PIDWrite(float output)
 {
 	DriverStationLCD *driverStationLCD = DriverStationLCD::GetInstance();
-	driverStationLCD->PrintfLine((DriverStationLCD::Line) 2, "PID Output: %f", output);
+	driverStationLCD->PrintfLine((DriverStationLCD::Line) 1, "Rotation PID Output: %f", output);
 	if (theRobot)
 		theRobot->TankDrive(output, -output);
 }
@@ -24,7 +24,7 @@ SonarControlledDriving::SonarControlledDriving(RobotDrive *controlledRobot)
 void SonarControlledDriving::PIDWrite(float output)
 {
 	DriverStationLCD *driverStationLCD = DriverStationLCD::GetInstance();
-	driverStationLCD->PrintfLine((DriverStationLCD::Line) 2, "PID Output: %f", output);
+	driverStationLCD->PrintfLine((DriverStationLCD::Line) 1, "Drive PID Output: %f", output);
 	if (theRobot)
 		theRobot->TankDrive(-output, -output);
 }

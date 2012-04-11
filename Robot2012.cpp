@@ -63,7 +63,7 @@
 #define ELEVATOR_SPEED_BOTTOM_SLOW 0.3F
 #define ELEVATOR_SPEED_TOP 1.0F
 #define DUMPER_ROLLER_RPM 1500.0F
-#define DUMPER_ROLLER_COUNTS_PER_REVOLUTION 400  //This is a property of the encoder we bought, don't change
+#define DUMPER_ROLLER_COUNTS_PER_REVOLUTION (400)  //This is a property of the encoder we bought, don't change
 
 
 #define CENTER_OF_IMAGE 160
@@ -82,6 +82,7 @@
 #define IMAGE_HEIGHT_IN_FEET(target_height_pxls) ((TARGET_HEIGHT_IN_FEET * (IMAGE_HEIGHT_IN_PIXELS / 2)) / target_height_pxls)
 #define CALCULATE_DISTANCE(target_height_pxls) (IMAGE_HEIGHT_IN_FEET(target_height_pxls)/TANGENT_OF_HALF_VERTICAL_FIELD_OF_VIEW)
 
+#define FPGA_TIME_TO_MINUTES_FACTOR (60 * 1000 * 1000) //FPGA time is in uSec
 
 //Controls defines - for new buttons, add a #define here and use it to get the key you want, that way we can change controls easily
 #define BUTTON_CAMERA_ALIGN_SHOT_BUTTON() stickRightDrive.GetTrigger()
@@ -464,7 +465,6 @@ public:
 			//TODO Print to the LCD as well
 			if (DetermineTargetPosition(colorImage) == 0)
 			{
-				driverStationLCD->PrintfLine((DriverStationLCD::Line) 1, "Camera is working");
 				if ((angleToTurn > (ANGLE_POSITION_BASE - DISTANCE_POSITION_TOLERANCE)) && 
 					(angleToTurn < (ANGLE_POSITION_BASE + DISTANCE_POSITION_TOLERANCE)) &&
 					(distanceToTarget > (DISTANCE_POSITION_BASE - DISTANCE_POSITION_TOLERANCE)) && 
@@ -472,18 +472,18 @@ public:
 					
 				{
 					SetRIOUserLED(1);
-					driverStationLCD->PrintfLine((DriverStationLCD::Line) 2, "And it's ON target");
+					driverStationLCD->PrintfLine((DriverStationLCD::Line) 0, "Camera is ON target");
 				}
 				else
 				{
 					SetRIOUserLED(0);
-					driverStationLCD->PrintfLine((DriverStationLCD::Line) 2, "And it's OFF target");
+					driverStationLCD->PrintfLine((DriverStationLCD::Line) 0, "Camera is OFF target");
 				}
 			}
 			else
 			{
 				SetRIOUserLED(0);
-				driverStationLCD->PrintfLine((DriverStationLCD::Line) 2, "And it's OFF target");
+				driverStationLCD->PrintfLine((DriverStationLCD::Line) 0, "Camera is OFF target");
 			}
 			delete colorImage;
 		}
@@ -529,19 +529,19 @@ public:
 		{
 		default:
 		case AUTONOMOUS_MODE_TWO_BALL_AND_TIP:
-			driverStationLCD->PrintfLine((DriverStationLCD::Line) 3, "Using 2 ball and tip bridge auton");
+			driverStationLCD->PrintfLine((DriverStationLCD::Line) 1, "Using 2 ball and tip bridge auton");
 			break;
 		case AUTONOMOUS_MODE_FOUR_BALL:
-			driverStationLCD->PrintfLine((DriverStationLCD::Line) 3, "Using 4 ball autonomous");
+			driverStationLCD->PrintfLine((DriverStationLCD::Line) 1, "Using 4 ball autonomous");
 			break;
 		case AUTONOMOUS_MODE_SIX_BALL:
-			driverStationLCD->PrintfLine((DriverStationLCD::Line) 3, "Using 6 ball autonomous");
+			driverStationLCD->PrintfLine((DriverStationLCD::Line) 1, "Using 6 ball autonomous");
 			break;
 		case AUTONOMOUS_MODE_TWO_BALL:
-			driverStationLCD->PrintfLine((DriverStationLCD::Line) 3, "Using 2 ball NO BRIDGE TIP");
+			driverStationLCD->PrintfLine((DriverStationLCD::Line) 1, "Using 2 ball NO BRIDGE TIP");
 			break;
 		case AUTONOMOUS_MODE_FEED:
-			driverStationLCD->PrintfLine((DriverStationLCD::Line) 3, "Autonomous Feeding balls");
+			driverStationLCD->PrintfLine((DriverStationLCD::Line) 1, "Autonomous Feeding balls");
 			break;
 		}
 		driverStationLCD->UpdateLCD();
@@ -809,8 +809,8 @@ public:
 			
 			distanceToTarget = 12 * CALCULATE_DISTANCE(topParticlePtr->boundingRect.height);
 
-			driverStationLCD->PrintfLine((DriverStationLCD::Line) 0, "Angle to turn: %.5f", -angleToTurn);
-			driverStationLCD->PrintfLine((DriverStationLCD::Line) 4, "Range to target: %.5f", distanceToTarget);
+			driverStationLCD->PrintfLine((DriverStationLCD::Line) 2, "Angle to turn: %.5f", -angleToTurn);
+			driverStationLCD->PrintfLine((DriverStationLCD::Line) 3, "Range to target: %.5f", distanceToTarget);
 			driverStationLCD->UpdateLCD();
 
 			#ifdef PID_TUNING
@@ -958,8 +958,6 @@ public:
 	void ManageElevator(bool bottom_up, bool bottom_down, bool top_up, bool top_down, bool dumper_roller, bool bottom_elevator_slow_up)
 	{
 		static Timer elevatorTimer;
-		static double dumper_roller_speed_prev = 0.0;
-		double dumper_roller_speed_current = 0.0;
 		static float dumper_roller_power = 0.0;
 		
 #ifdef TEST_ELEVATOR_TIMING
@@ -1011,25 +1009,15 @@ public:
 			jaguarElevatorTop.Set(0.0);
 		}
 		
-
-		//Read the speed of the roller if it is commanded on or if it's still spinning.
-		if (dumper_roller || (dumper_roller_speed_prev > 100))
-		{
-			counterDumperRoller.Start();
-			//Get the counter value, and divide it by the counter CPR times the period(sec)/60 to get RPM.  (Note this equation is written so that only one division and multiplication is done at runtime.)
-			dumper_roller_speed_current = counterDumperRoller.Get() / ((DUMPER_ROLLER_COUNTS_PER_REVOLUTION/60) * counterDumperRoller.GetPeriod());
-			counterDumperRoller.Reset();
-			//Filter the incoming speed against previous speed to get a 
-			dumper_roller_speed_prev = (dumper_roller_speed_current * 0.25) + (dumper_roller_speed_prev * 0.75);
-			
-			driverStationLCD->PrintfLine((DriverStationLCD::Line) 3, "Roller RPM: %f", dumper_roller_speed_prev);
-			driverStationLCD->UpdateLCD();
-		}
-
+		float roller_rpm = GetRollerVelocity(dumper_roller);
+		
+		driverStationLCD->PrintfLine((DriverStationLCD::Line) 4, "Roller RPM: %f", roller_rpm);
+		driverStationLCD->UpdateLCD();
+		
 		if (dumper_roller)
 		{
 #if 0
-			if (dumper_roller_speed_prev < DUMPER_ROLLER_RPM)
+			if (roller_rpm < DUMPER_ROLLER_RPM)
 			{
 				if (dumper_roller_power < 0.9F)
 				{
@@ -1127,7 +1115,7 @@ public:
 		}TARGETING_STATE;
 		
 		static TARGETING_STATE state_targeting = TARGETING_IDLE;
-		driverStationLCD->PrintfLine((DriverStationLCD::Line) 1, "Angle Turned: %f", gyroscope.GetAngle());
+		driverStationLCD->PrintfLine((DriverStationLCD::Line) 4, "Angle Turned: %f", gyroscope.GetAngle());
 		//driverStationLCD->PrintfLine((DriverStationLCD::Line) 4, "Range to target: %f", rangeFinder.GetRangeInches());
 		driverStationLCD->PrintfLine((DriverStationLCD::Line) 5, "Autoposition State: %d", state_targeting);
 		driverStationLCD->UpdateLCD();
@@ -1265,9 +1253,7 @@ public:
 				targetLocked = false;
 				on_target_count = 0;
 			}
-
 			break;
-			
 		}
 	}
 	
@@ -1303,6 +1289,35 @@ public:
 			sol1->Set(false);
 			sol2->Set(true);
 		}
+	}
+	
+	float GetRollerVelocity(bool roller_on)
+	{
+		static UINT32 prev_time = 0;
+		static float filtered_rpm = 0;
+		float return_rpm = 0;
+		
+		counterDumperRoller.Start();
+		if (prev_time == 0)
+		{
+			prev_time = GetFPGATime();
+			return return_rpm;
+		}
+		
+		if ((filtered_rpm > 100) || (roller_on == true))
+		{
+			UINT32 time_difference = GetFPGATime() - prev_time;
+			
+			//Filter the incoming speed against previous speed to get a 
+			float current_rpm = ((float)counterDumperRoller.Get()) / ((float)(((float)DUMPER_ROLLER_COUNTS_PER_REVOLUTION/(float)FPGA_TIME_TO_MINUTES_FACTOR) * time_difference)); 
+			filtered_rpm = (current_rpm * 0.25) + (filtered_rpm * 0.75);
+			return_rpm = filtered_rpm;
+		}
+		
+		counterDumperRoller.Reset();
+		prev_time = GetFPGATime();
+		
+		return return_rpm;
 	}
 };
 
