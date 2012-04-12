@@ -17,8 +17,8 @@
 #define SOLENOID_OUTPUT_CHANNEL 1	//in 2012 this should be in slot 3 (chan 1), or slot 6 (chan 2)
 
 #define CATAPULT_FIRE_TIME 1.0
-#define CATAPULT_REARM_TIME 1.75
-#define CATAPULT_RELOAD_TIME_FOUR_BALL 1.25
+#define CATAPULT_REARM_TIME 1.00
+#define CATAPULT_RELOAD_TIME_FOUR_BALL 1.75
 #define SLOW_PICKUP_DURING_RELOAD_START 0.25
 #define CATAPULT_LATCH_TIME 0.2
 
@@ -59,12 +59,13 @@
 #define SLOW_TURN 0.30F
 #define FAST_TURN 0.40F
 
-#define ELEVATOR_SPEED_BOTTOM 0.6F
+#define ELEVATOR_SPEED_BOTTOM 0.8F
 #define ELEVATOR_SPEED_BOTTOM_SLOW 0.3F
 #define ELEVATOR_SPEED_TOP 1.0F
-#define DUMPER_ROLLER_RPM 1500.0F
+//#define DUMPER_ROLLER_RPM 3500.0F
+#define DUMPER_ROLLER_POWER 0.7
 #define DUMPER_ROLLER_COUNTS_PER_REVOLUTION (400)  //This is a property of the encoder we bought, don't change
-#define DUMPER_ROLLER_FILTER_CONSTANT 0.0
+#define DUMPER_ROLLER_FILTER_CONSTANT 0.1
 #define DUMPER_ROLLER_VOLTAGE_RAMP_RATE 0.19
 
 
@@ -291,19 +292,10 @@ class Robot2012 : public IterativeRobot
 	{
 		AUTONOMOUS_LINING_UP_SHOT,
 		AUTONOMOUS_FIRING_SHOT,
+		AUTONOMOUS_SHOT_FIRED,
 		AUTONOMOUS_REARMING_SHOT,
 		AUTONOMOUS_RELOADING,
-		AUTONOMOUS_SHOOTING_SECOND_SHOT,
-#ifdef ENABLE_FOUR_SHOT_SUPER_AUTONOMOUS		
-		AUTONOMOUS_REARMING_SECOND_SHOT,
-		AUTONOMOUS_RELOADING_FOR_THIRD,
-		AUTONOMOUS_SHOOTING_THIRD_SHOT,
-		AUTONOMOUS_REARMING_THIRD_SHOT,
-		AUTONOMOUS_RELOADING_FOR_FOURTH,
-		AUTONOMOUS_SHOOTING_FOURTH_SHOT,
-#endif
 		AUTONOMOUS_HITTING_BRIDGE,
-		AUTONOMOUS_WAIT_FOR_TELEOP,
 		AUTONOMOUS_DONE,
 		
 	}AUTONOMOUS_STATE;
@@ -328,7 +320,7 @@ class Robot2012 : public IterativeRobot
 		CATAPULT_FIRING
 	}CATAPULT_STATE;
 	
-	static CATAPULT_STATE catapultState;
+	CATAPULT_STATE catapultState;
 public:
 
 	Robot2012(void):
@@ -390,8 +382,6 @@ public:
 		rangePID.SetTolerance(RANGE_PID_TOLERENCE);
 		rangePID.Disable();
 		
-		catapultState = CATAPULT_READY;
-		autonomousMode = AUTONOMOUS_MODE_TWO_BALL_AND_TIP;
 				
 		
 		printf("Robot2012 Constructor Completed\n");
@@ -405,10 +395,13 @@ public:
 		// Actions which would be performed once (and only once) upon initialization of the
 		// robot would be put here.
 		
-		printf("RobotInit() completed.\n");
+
+		catapultState = CATAPULT_READY;
+		autonomousMode = AUTONOMOUS_MODE_TWO_BALL_AND_TIP;
 		
 		timeSinceBoot.Start();
 		myRobot.SetExpiration(1.0);
+		printf("RobotInit() completed.\n");
 	}
 	
 	void DisabledInit(void) 
@@ -474,18 +467,18 @@ public:
 					
 				{
 					SetRIOUserLED(1);
-					driverStationLCD->PrintfLine((DriverStationLCD::Line) 0, "Camera is ON target");
+					//driverStationLCD->PrintfLine((DriverStationLCD::Line) 0, "Camera is ON target");
 				}
 				else
 				{
 					SetRIOUserLED(0);
-					driverStationLCD->PrintfLine((DriverStationLCD::Line) 0, "Camera is OFF target");
+					//driverStationLCD->PrintfLine((DriverStationLCD::Line) 0, "Camera is OFF target");
 				}
 			}
 			else
 			{
 				SetRIOUserLED(0);
-				driverStationLCD->PrintfLine((DriverStationLCD::Line) 0, "Camera is OFF target");
+				//driverStationLCD->PrintfLine((DriverStationLCD::Line) 0, "Camera is OFF target");
 			}
 			delete colorImage;
 		}
@@ -518,6 +511,7 @@ public:
 //			case AUTONOMOUS_MODE_SIX_BALL:
 				autonomousMode = AUTONOMOUS_MODE_FEED;
 				break;
+			default:
 			case AUTONOMOUS_MODE_FEED:
 				autonomousMode = AUTONOMOUS_MODE_TWO_BALL_AND_TIP;
 				break;
@@ -557,7 +551,7 @@ public:
 		{
 			shots_fired = 0;
 		}
-		
+		bool use_slow_roller = ((number_of_shots > 2) && (shots_fired < (number_of_shots - 1)));
 		if (shots_fired < number_of_shots)
 		{
 			running_auton = true;
@@ -568,10 +562,12 @@ public:
 			{
 			default:
 			case AUTONOMOUS_FIRING_SHOT:
-				autonomousState = AUTONOMOUS_FIRING_SHOT;
-				ManageElevator(false,false,false,false,false,true);
 				ManageCatapult(true, true);
 				shots_fired++;
+			case AUTONOMOUS_SHOT_FIRED:
+				autonomousState = AUTONOMOUS_SHOT_FIRED;
+				ManageCatapult(false, false);
+				ManageElevator(false,false,false,false,false,use_slow_roller);
 				if (catapultState == CATAPULT_COCKING)
 				{
 					autonomousState = AUTONOMOUS_REARMING_SHOT;
@@ -581,7 +577,7 @@ public:
 			case AUTONOMOUS_REARMING_SHOT:
 				ManageAppendages(false,false);
 
-				//For the first shot, don't slow reload because it could jam the loading of ball 2
+				//For the first shot, don't pickup from the floor because it could jam the loading of ball 2
 				if (shots_fired < 2)
 				{
 					ManageElevator(false,false,false,false,false,false);
@@ -604,7 +600,7 @@ public:
 				ManageAppendages(false,false);
 				if (autonomousStateTimer.Get() > SLOW_PICKUP_DURING_RELOAD_START)
 				{
-					ManageElevator(false,false,false,true,false,true);
+					ManageElevator(false,false,false,true,false,use_slow_roller);
 				}
 				else
 				{
@@ -616,7 +612,7 @@ public:
 				{
 					ManageCatapult(false, false);
 					autonomousStateTimer.Reset();
-					autonomousState = AUTONOMOUS_SHOOTING_SECOND_SHOT;
+					autonomousState = AUTONOMOUS_FIRING_SHOT;
 				}
 				break;
 			}
@@ -1013,12 +1009,12 @@ public:
 		
 		float roller_rpm = GetRollerVelocity(dumper_roller);
 		
-		driverStationLCD->PrintfLine((DriverStationLCD::Line) 4, "Roller RPM: %f", roller_rpm);
+		driverStationLCD->PrintfLine((DriverStationLCD::Line) 3, "Roller RPM: %f", roller_rpm);
 		driverStationLCD->UpdateLCD();
 		
 		if (dumper_roller)
 		{
-#if 0
+#ifdef DUMPER_ROLLER_RPM
 			if (roller_rpm < DUMPER_ROLLER_RPM)
 			{
 				if (dumper_roller_power < (1 - DUMPER_ROLLER_VOLTAGE_RAMP_RATE))
@@ -1042,7 +1038,7 @@ public:
 				}
 			}
 #else
-			dumper_roller_power = 0.75;
+			dumper_roller_power = DUMPER_ROLLER_POWER;
 #endif
 		}
 		else
@@ -1058,13 +1054,14 @@ public:
 		static Timer state_timer;
 		state_timer.Start();//Doesn't do anything unless it's not running
 		
+		if (!catapult_shoot)button_released = true;
+		
 		switch (catapultState)
 		{
 		case CATAPULT_COCKING:
 			CATAPULT_PUSHER_EXTENDED(true);
 			CATAPULT_LATCH_EXTENDED(false);
-			if (!catapult_shoot)button_released = true;
-			if (state_timer.Get() >= CATAPULT_REARM_TIME);
+			if (state_timer.Get() >= CATAPULT_REARM_TIME)
 			{
 				state_timer.Reset();
 				catapultState = CATAPULT_WAITING_LATCH;
@@ -1073,7 +1070,6 @@ public:
 		case CATAPULT_WAITING_LATCH:
 			CATAPULT_PUSHER_EXTENDED(false);
 			CATAPULT_LATCH_EXTENDED(true);
-			if (!catapult_shoot)button_released = true;
 			if (state_timer.Get() > CATAPULT_LATCH_TIME)
 			{
 				state_timer.Reset();
@@ -1081,7 +1077,6 @@ public:
 			}
 			break;
 		case CATAPULT_READY:
-			if (!catapult_shoot)button_released = true;
 			if (catapult_shoot && button_released)
 			{
 				if ((force_shoot == true) || (targetLocked == true)) 
@@ -1095,11 +1090,10 @@ public:
 		case CATAPULT_FIRING:
 			CATAPULT_PUSHER_EXTENDED(false);
 			CATAPULT_LATCH_EXTENDED(false);
-			if (!catapult_shoot)button_released = true;
 			if (state_timer.Get() >= CATAPULT_FIRE_TIME)
 			{
 				state_timer.Reset();
-				CATAPULT_PUSHER_EXTENDED(true);
+				//CATAPULT_PUSHER_EXTENDED(true);
 				catapultState = CATAPULT_COCKING;
 			}
 			break;
@@ -1299,10 +1293,10 @@ public:
 		static float filtered_rpm = 0;
 		float return_rpm = 0;
 		
-		counterDumperRoller.Start();
 		if (prev_time == 0)
 		{
 			prev_time = GetFPGATime();
+			counterDumperRoller.Start();
 			return return_rpm;
 		}
 		
@@ -1310,6 +1304,7 @@ public:
 		{
 			UINT32 time_difference = GetFPGATime() - prev_time;
 			INT32 count = counterDumperRoller.Get();
+			driverStationLCD->PrintfLine((DriverStationLCD::Line) 1, "Roller count: %d", count);
 			//Filter the incoming speed against previous speed to get a 
 			float current_rpm = ((float)count) / ((float)(((float)DUMPER_ROLLER_COUNTS_PER_REVOLUTION/(float)FPGA_TIME_TO_MINUTES_FACTOR) * time_difference)); 
 			filtered_rpm = (current_rpm * (1 - DUMPER_ROLLER_FILTER_CONSTANT)) + (filtered_rpm * DUMPER_ROLLER_FILTER_CONSTANT);
