@@ -1042,7 +1042,7 @@ public:
 				}
 			}
 #else
-			dumper_roller_power = 0.7;
+			dumper_roller_power = 0.75;
 #endif
 		}
 		else
@@ -1309,9 +1309,9 @@ public:
 		if ((filtered_rpm > 100) || (roller_on == true))
 		{
 			UINT32 time_difference = GetFPGATime() - prev_time;
-			
+			INT32 count = counterDumperRoller.Get();
 			//Filter the incoming speed against previous speed to get a 
-			float current_rpm = ((float)counterDumperRoller.Get()) / ((float)(((float)DUMPER_ROLLER_COUNTS_PER_REVOLUTION/(float)FPGA_TIME_TO_MINUTES_FACTOR) * time_difference)); 
+			float current_rpm = ((float)count) / ((float)(((float)DUMPER_ROLLER_COUNTS_PER_REVOLUTION/(float)FPGA_TIME_TO_MINUTES_FACTOR) * time_difference)); 
 			filtered_rpm = (current_rpm * (1 - DUMPER_ROLLER_FILTER_CONSTANT)) + (filtered_rpm * DUMPER_ROLLER_FILTER_CONSTANT);
 			return_rpm = filtered_rpm;
 		}
