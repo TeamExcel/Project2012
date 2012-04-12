@@ -64,6 +64,8 @@
 #define ELEVATOR_SPEED_TOP 1.0F
 #define DUMPER_ROLLER_RPM 1500.0F
 #define DUMPER_ROLLER_COUNTS_PER_REVOLUTION (400)  //This is a property of the encoder we bought, don't change
+#define DUMPER_ROLLER_FILTER_CONSTANT 0.0
+#define DUMPER_ROLLER_VOLTAGE_RAMP_RATE 0.19
 
 
 #define CENTER_OF_IMAGE 160
@@ -1019,9 +1021,9 @@ public:
 #if 0
 			if (roller_rpm < DUMPER_ROLLER_RPM)
 			{
-				if (dumper_roller_power < 0.9F)
+				if (dumper_roller_power < (1 - DUMPER_ROLLER_VOLTAGE_RAMP_RATE))
 				{
-					dumper_roller_power += 0.1F;
+					dumper_roller_power += DUMPER_ROLLER_VOLTAGE_RAMP_RATE;
 				}
 				else
 				{
@@ -1030,9 +1032,9 @@ public:
 			}
 			else
 			{
-				if (dumper_roller_power > 0.1F)
+				if (dumper_roller_power > DUMPER_ROLLER_VOLTAGE_RAMP_RATE)
 				{
-					dumper_roller_power -= 0.1F;
+					dumper_roller_power -= DUMPER_ROLLER_VOLTAGE_RAMP_RATE;
 				}
 				else
 				{
@@ -1310,7 +1312,7 @@ public:
 			
 			//Filter the incoming speed against previous speed to get a 
 			float current_rpm = ((float)counterDumperRoller.Get()) / ((float)(((float)DUMPER_ROLLER_COUNTS_PER_REVOLUTION/(float)FPGA_TIME_TO_MINUTES_FACTOR) * time_difference)); 
-			filtered_rpm = (current_rpm * 0.25) + (filtered_rpm * 0.75);
+			filtered_rpm = (current_rpm * (1 - DUMPER_ROLLER_FILTER_CONSTANT)) + (filtered_rpm * DUMPER_ROLLER_FILTER_CONSTANT);
 			return_rpm = filtered_rpm;
 		}
 		
