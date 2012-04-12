@@ -18,7 +18,7 @@
 
 #define CATAPULT_FIRE_TIME 1.0
 #define CATAPULT_REARM_TIME 1.00
-#define CATAPULT_RELOAD_TIME_FOUR_BALL 1.75
+#define CATAPULT_RELOAD_TIME_FOUR_BALL 2.00
 #define SLOW_PICKUP_DURING_RELOAD_START 0.25
 #define CATAPULT_LATCH_TIME 0.2
 
@@ -33,7 +33,7 @@
 
 #define AUTONOMOUS_BACKUP_SPEED_SLOW -0.45
 #define AUTONOMOUS_BACKUP_SPEED_FAST -0.7
-#define AUTONOMOUS_BACKUP_TIME_SLOW (1.6 + AUTONOMOUS_BACKUP_TIME_FAST)
+#define AUTONOMOUS_BACKUP_TIME_SLOW (1.75 + AUTONOMOUS_BACKUP_TIME_FAST)
 #define AUTONOMOUS_BACKUP_TIME_FAST (0.9 + AUTONOMOUS_BACKUP_TIME_WAIT)
 #define AUTONOMOUS_BACKUP_TIME_WAIT 1.0
 //#define CATAPULT_PRELOAD_TIME_FOUR_BALL 0.1  	//How long we turn on the reload roller before the catapult finishes rearming
@@ -63,7 +63,7 @@
 #define ELEVATOR_SPEED_BOTTOM_SLOW 0.3F
 #define ELEVATOR_SPEED_TOP 1.0F
 //#define DUMPER_ROLLER_RPM 3500.0F
-#define DUMPER_ROLLER_POWER 0.7
+#define DUMPER_ROLLER_POWER 0.75
 #define DUMPER_ROLLER_COUNTS_PER_REVOLUTION (400)  //This is a property of the encoder we bought, don't change
 #define DUMPER_ROLLER_FILTER_CONSTANT 0.1
 #define DUMPER_ROLLER_VOLTAGE_RAMP_RATE 0.19
@@ -1040,10 +1040,18 @@ public:
 #else
 			dumper_roller_power = DUMPER_ROLLER_POWER;
 #endif
+			if (compressor.Enabled() == true)
+			{
+				compressor.Stop();
+			}
 		}
 		else
 		{
-			dumper_roller_power = 0.0;
+			dumper_roller_power = 0.0;			
+			if (compressor.Enabled() == false)
+			{
+				compressor.Start();
+			}
 		}
 		victorDumperRoller.Set(dumper_roller_power);
 	}
