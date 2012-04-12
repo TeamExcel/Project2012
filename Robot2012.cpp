@@ -62,8 +62,8 @@
 #define ELEVATOR_SPEED_BOTTOM 0.8F
 #define ELEVATOR_SPEED_BOTTOM_SLOW 0.3F
 #define ELEVATOR_SPEED_TOP 1.0F
-//#define DUMPER_ROLLER_RPM 3500.0F
-#define DUMPER_ROLLER_POWER 0.75
+#define DUMPER_ROLLER_RPM 4850.0F
+#define DUMPER_ROLLER_POWER 0.725
 #define DUMPER_ROLLER_COUNTS_PER_REVOLUTION (400)  //This is a property of the encoder we bought, don't change
 #define DUMPER_ROLLER_FILTER_CONSTANT 0.1
 #define DUMPER_ROLLER_VOLTAGE_RAMP_RATE 0.19
@@ -1015,31 +1015,36 @@ public:
 		if (dumper_roller)
 		{
 #ifdef DUMPER_ROLLER_RPM
-			if (roller_rpm < DUMPER_ROLLER_RPM)
+			if (!BUTTON_CATAPULT_FORCE_SHOOT())
 			{
-				if (dumper_roller_power < (1 - DUMPER_ROLLER_VOLTAGE_RAMP_RATE))
+				if (roller_rpm < DUMPER_ROLLER_RPM)
 				{
-					dumper_roller_power += DUMPER_ROLLER_VOLTAGE_RAMP_RATE;
+					if (dumper_roller_power < (1 - DUMPER_ROLLER_VOLTAGE_RAMP_RATE))
+					{
+						dumper_roller_power += DUMPER_ROLLER_VOLTAGE_RAMP_RATE;
+					}
+					else
+					{
+						dumper_roller_power = 1.0F;
+					}
 				}
 				else
 				{
-					dumper_roller_power = 1.0F;
+					if (dumper_roller_power > DUMPER_ROLLER_VOLTAGE_RAMP_RATE)
+					{
+						dumper_roller_power -= DUMPER_ROLLER_VOLTAGE_RAMP_RATE;
+					}
+					else
+					{
+						dumper_roller_power = 0.0F;
+					}
 				}
 			}
 			else
-			{
-				if (dumper_roller_power > DUMPER_ROLLER_VOLTAGE_RAMP_RATE)
-				{
-					dumper_roller_power -= DUMPER_ROLLER_VOLTAGE_RAMP_RATE;
-				}
-				else
-				{
-					dumper_roller_power = 0.0F;
-				}
-			}
-#else
-			dumper_roller_power = DUMPER_ROLLER_POWER;
 #endif
+			{
+				dumper_roller_power = DUMPER_ROLLER_POWER;
+			}
 			if (compressor.Enabled() == true)
 			{
 				compressor.Stop();
