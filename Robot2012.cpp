@@ -62,7 +62,7 @@
 #define ELEVATOR_SPEED_BOTTOM 0.8F
 #define ELEVATOR_SPEED_BOTTOM_SLOW 0.3F
 #define ELEVATOR_SPEED_TOP 1.0F
-#define DUMPER_ROLLER_RPM 4850.0F
+#define DUMPER_ROLLER_RPM 4100.0F
 #define DUMPER_ROLLER_POWER 0.725
 #define DUMPER_ROLLER_COUNTS_PER_REVOLUTION (400)  //This is a property of the encoder we bought, don't change
 #define DUMPER_ROLLER_FILTER_CONSTANT 0.1
@@ -675,19 +675,19 @@ public:
 		else if (autonomousMode == AUTONOMOUS_MODE_FEED)
 		{
 			autonomousStateTimer.Start();
-			if (autonomousStateTimer.Get() > 5.5)
-			{
-				ManageElevator(false,false,false,false,false,false);
-			}
-			else if (autonomousStateTimer.Get() > 3.5)
+			if (autonomousStateTimer.Get() > 7.0)
 			{
 				ManageElevator(false,true,false,true,false,false);
 				return;
 			}
-			else if (autonomousStateTimer.Get() > 1.0)
+			else if (autonomousStateTimer.Get() > 5.0)
 			{
 				ManageElevator(false,true,false,false,false,false);
 				return;
+			}
+			else
+			{
+				ManageElevator(false,false,false,false,false,false);
 			}
 		}
 		
