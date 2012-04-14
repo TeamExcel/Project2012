@@ -24,7 +24,7 @@
 
 //Loading from the floor occurs at times:  (note: ideally, drop at <1.0 and at 7.0)
 //First ball time < 1.0 (CATAPULT_FIRE_TIME) sec or  3.0 (FIRE + REARM + SLOW_PICKUP) < time < 6.75 ( 1 FULL CYCLE + FIRE + REARM)
-//Second ball 7.0 < time < 10.75 (previous times + CYCLE_TIME)
+//Second ball 6.25 < time < 10.0 (previous times + CYCLE_TIME)
 
 //Generically ((CYCLE_TIME * EXTRA_BALL_NUM) - (RELOAD_TIME - SLOW_PICKUP)) < time < ((CYCLE_TIME * EXTRA_BALL_NUM) + FIRE_TIME + REARM_TIME) 
 
@@ -33,9 +33,11 @@
 
 #define AUTONOMOUS_BACKUP_SPEED_SLOW -0.45
 #define AUTONOMOUS_BACKUP_SPEED_FAST -0.7
-#define AUTONOMOUS_BACKUP_TIME_SLOW (1.75 + AUTONOMOUS_BACKUP_TIME_FAST)
+#define AUTONOMOUS_BACKUP_TIME_SLOW (2.05 + AUTONOMOUS_BACKUP_TIME_FAST)
 #define AUTONOMOUS_BACKUP_TIME_FAST (0.9 + AUTONOMOUS_BACKUP_TIME_WAIT)
 #define AUTONOMOUS_BACKUP_TIME_WAIT 1.0
+#define AUTONOMOUS_FENDER_SHOT_FAST -0.55
+#define AUTONOMOUS_FENDER_SHOT_SLOW -0.3
 //#define CATAPULT_PRELOAD_TIME_FOUR_BALL 0.1  	//How long we turn on the reload roller before the catapult finishes rearming
 //Fire 0.0sec
 //Rearm start 0.0sec
@@ -307,7 +309,9 @@ class Robot2012 : public IterativeRobot
 		AUTONOMOUS_MODE_TWO_BALL,
 		AUTONOMOUS_MODE_FOUR_BALL,
 		AUTONOMOUS_MODE_SIX_BALL,
-		AUTONOMOUS_MODE_FEED
+		AUTONOMOUS_MODE_FEED,
+		AUTONOMOUS_MODE_FENDER_SHOTS,
+		AUTONOMOUS_MODE_THREE_BALL
 	}AUTONOMOUS_MODE_SELECT;
 		
 	AUTONOMOUS_MODE_SELECT autonomousMode;
@@ -494,7 +498,7 @@ public:
 			button_combo_timer.Stop();
 		}
 		
-		if (button_combo_timer.Get() > 3.00)
+		if (button_combo_timer.Get() > 2.00)
 		{
 			button_combo_timer.Reset();
 			switch (autonomousMode)
@@ -503,6 +507,9 @@ public:
 				autonomousMode = AUTONOMOUS_MODE_TWO_BALL;
 				break;
 			case AUTONOMOUS_MODE_TWO_BALL:
+				autonomousMode = AUTONOMOUS_MODE_THREE_BALL;
+				break;
+			case AUTONOMOUS_MODE_THREE_BALL:
 				autonomousMode = AUTONOMOUS_MODE_FOUR_BALL;
 				break;
 			case AUTONOMOUS_MODE_FOUR_BALL:
@@ -511,8 +518,11 @@ public:
 //			case AUTONOMOUS_MODE_SIX_BALL:
 				autonomousMode = AUTONOMOUS_MODE_FEED;
 				break;
-			default:
 			case AUTONOMOUS_MODE_FEED:
+				autonomousMode = AUTONOMOUS_MODE_FENDER_SHOTS;
+				break;
+			default:
+			case AUTONOMOUS_MODE_FENDER_SHOTS:
 				autonomousMode = AUTONOMOUS_MODE_TWO_BALL_AND_TIP;
 				break;
 			}
@@ -536,22 +546,28 @@ public:
 		case AUTONOMOUS_MODE_TWO_BALL:
 			driverStationLCD->PrintfLine((DriverStationLCD::Line) 1, "Using 2 ball NO BRIDGE TIP");
 			break;
+		case AUTONOMOUS_MODE_THREE_BALL:
+			driverStationLCD->PrintfLine((DriverStationLCD::Line) 1, "Using 3 ball NO BRIDGE TIP");
+			break;
 		case AUTONOMOUS_MODE_FEED:
 			driverStationLCD->PrintfLine((DriverStationLCD::Line) 1, "Autonomous Feeding balls");
+			break;
+		case AUTONOMOUS_MODE_FENDER_SHOTS:
+			driverStationLCD->PrintfLine((DriverStationLCD::Line) 1, "Shooting from the fender");
 			break;
 		}
 		driverStationLCD->UpdateLCD();
 	}
 
-	bool AlternateAutonomous(bool hit_bridge, int number_of_shots)
+	bool CatapultAutonomous(bool hit_bridge, int number_of_shots)
 	{
 		bool running_auton = false;
 		static int shots_fired;
-		if (m_autoPeriodicLoops == 0)
+		if (m_autoPeriodicLoops < 2)
 		{
 			shots_fired = 0;
 		}
-		bool use_slow_roller = ((number_of_shots > 2) && (shots_fired < (number_of_shots - 1)));
+		bool use_slow_roller = ((number_of_shots > 2) && (shots_fired < number_of_shots));
 		if (shots_fired < number_of_shots)
 		{
 			running_auton = true;
@@ -654,22 +670,27 @@ public:
 		CameraInitialize();
 		if (autonomousMode == AUTONOMOUS_MODE_TWO_BALL_AND_TIP)
 		{
-			if (AlternateAutonomous(true,2))
+			if (CatapultAutonomous(true,2))
 				return;
 		}
 		else if(autonomousMode == AUTONOMOUS_MODE_TWO_BALL)
 		{
-			if (AlternateAutonomous(false,2))
+			if (CatapultAutonomous(false,2))
+				return;
+		}
+		else if (autonomousMode == AUTONOMOUS_MODE_THREE_BALL)
+		{
+			if (CatapultAutonomous(false, 3))
 				return;
 		}
 		else if (autonomousMode == AUTONOMOUS_MODE_FOUR_BALL)
 		{
-			if (AlternateAutonomous(false,4))
+			if (CatapultAutonomous(false,4))
 				return;
 		}
 		else if (autonomousMode == AUTONOMOUS_MODE_SIX_BALL)
 		{
-			if (AlternateAutonomous(false, 6))
+			if (CatapultAutonomous(false, 6))
 				return;
 		}
 		else if (autonomousMode == AUTONOMOUS_MODE_FEED)
@@ -688,6 +709,25 @@ public:
 			else
 			{
 				ManageElevator(false,false,false,false,false,false);
+			}
+		}
+		else if (autonomousMode == AUTONOMOUS_MODE_FENDER_SHOTS)
+		{
+			autonomousStateTimer.Start();
+			if (autonomousStateTimer.Get() < 3.5)
+			{
+				myRobot.TankDrive(AUTONOMOUS_FENDER_SHOT_FAST,AUTONOMOUS_FENDER_SHOT_FAST);
+				ManageElevator(false,false,false,false,true,false);
+			}
+			else if (autonomousStateTimer.Get() < 4.0)
+			{
+				myRobot.TankDrive(AUTONOMOUS_FENDER_SHOT_SLOW,AUTONOMOUS_FENDER_SHOT_SLOW);
+				ManageElevator(false,false,true,false,true,false);
+			}
+			else
+			{
+				myRobot.TankDrive(0.0,0.0);
+				ManageElevator(false,true,true,false,true,false);
 			}
 		}
 		
