@@ -6,9 +6,6 @@
 #include "customPIDs.h"
 #include "AnalogRangeFinder.h"
 
-//Load a ball after 1.75 seconds and before 4.25 seconds
-//Load the last ball now at 6.0 seconds and before 8.5 seconds
-
 ////////////////////////////////////////////////////////
 // Defines and typedefs
 ////////////////////////////////////////////////////////
@@ -22,7 +19,7 @@
 #define SLOW_PICKUP_DURING_RELOAD_START 0.25
 #define CATAPULT_LATCH_TIME 0.2
 
-//Loading from the floor occurs at times:  (note: ideally, drop at <1.0 and at 7.0)
+//Loading from the floor occurs at times:  (note: ideally, drop at <1.0 and at 6.25)
 //First ball time < 1.0 (CATAPULT_FIRE_TIME) sec or  3.0 (FIRE + REARM + SLOW_PICKUP) < time < 6.75 ( 1 FULL CYCLE + FIRE + REARM)
 //Second ball 6.25 < time < 10.0 (previous times + CYCLE_TIME)
 
@@ -36,8 +33,8 @@
 #define AUTONOMOUS_BACKUP_TIME_SLOW (2.05 + AUTONOMOUS_BACKUP_TIME_FAST)
 #define AUTONOMOUS_BACKUP_TIME_FAST (0.9 + AUTONOMOUS_BACKUP_TIME_WAIT)
 #define AUTONOMOUS_BACKUP_TIME_WAIT 1.0
-#define AUTONOMOUS_FENDER_SHOT_FAST -0.55
-#define AUTONOMOUS_FENDER_SHOT_SLOW -0.3
+#define AUTONOMOUS_FENDER_SHOT_FAST (-0.55)
+#define AUTONOMOUS_FENDER_SHOT_SLOW (-0.3)
 //#define CATAPULT_PRELOAD_TIME_FOUR_BALL 0.1  	//How long we turn on the reload roller before the catapult finishes rearming
 //Fire 0.0sec
 //Rearm start 0.0sec
@@ -105,7 +102,7 @@
 #define BUTTON_DUMPER_RAMP_EXTEND() stickShooter.GetRawButton(9)
 #define BUTTON_DUMPER_ROLLER() stickShooter.GetRawButton(11)
 
-#define BUTTON_LOWER_BRIDGE_RAM() stickLeftDrive.GetTop()
+#define BUTTON_STINGER_TOGGLE() stickLeftDrive.GetTop()
 
 //#define BUTTON_COMBO_SWITCH_AUTONOMOUS() (stickShooter.GetTrigger() && stickLeftDrive.GetTrigger() && stickRightDrive.GetTrigger())
 #define BUTTON_COMBO_SWITCH_AUTONOMOUS() (stickRightDrive.GetTrigger())
@@ -169,7 +166,7 @@
 
 
 //Helper Macros
-#define DUMPER_RAMP_EXTENDED(isExtended) {FlipSolenoids(isExtended, &solenoidDumperRampUp, &solenoidDumperRampDown);}
+#define STINGER_EXTENDED(isExtended) {FlipSolenoids(isExtended, &solenoidStingerExtend, &solenoidStingerRetract);}
 #define BRIDGE_RAM_EXTENDED(isExtended) {FlipSolenoids(isExtended, &solenoidBridgeRamDown, &solenoidBridgeRamUp);}
 #define CATAPULT_PUSHER_EXTENDED(isExtended) {FlipSolenoids(isExtended, &solenoidCatapultPusher, &solenoidCatapultPuller);}
 #define CATAPULT_LATCH_EXTENDED(isExtended) {FlipSolenoids(isExtended, &solenoidCatapultLatchExtend, &solenoidCatapultLatchRetract);}
@@ -195,8 +192,8 @@ typedef enum
 	SOLENOID_CHANNEL_2_CATAPULT_PULLER,
 	SOLENOID_CHANNEL_3_BRIDGE_RAM_DOWN,
 	SOLENOID_CHANNEL_4_BRIDGE_RAM_UP,
-	SOLENOID_CHANNEL_5_DUMPER_RAMP_UP,
-	SOLENOID_CHANNEL_6_DUMPER_RAMP_DOWN,
+	SOLENOID_CHANNEL_5_STINGER_EXTEND,
+	SOLENOID_CHANNEL_6_STINGER_RETRACT,
 	SOLENOID_CHANNEL_7_CATAPULT_LATCH_EXTEND,
 	SOLENOID_CHANNEL_8_CATAPULT_LATCH_RETRACT
 }SOLENOID_CHANNEL_TYPE;
@@ -254,8 +251,8 @@ class Robot2012 : public IterativeRobot
 	Solenoid solenoidCatapultPuller;
 	Solenoid solenoidBridgeRamDown;
 	Solenoid solenoidBridgeRamUp;
-	Solenoid solenoidDumperRampUp;
-	Solenoid solenoidDumperRampDown;
+	Solenoid solenoidStingerExtend;
+	Solenoid solenoidStingerRetract;
 	Solenoid solenoidCatapultLatchExtend;
 	Solenoid solenoidCatapultLatchRetract;
 	Joystick stickRightDrive; // only joystick
@@ -342,8 +339,8 @@ public:
 		solenoidCatapultPuller(SOLENOID_OUTPUT_CHANNEL, SOLENOID_CHANNEL_2_CATAPULT_PULLER),
 		solenoidBridgeRamDown(SOLENOID_OUTPUT_CHANNEL, SOLENOID_CHANNEL_3_BRIDGE_RAM_DOWN),
 		solenoidBridgeRamUp(SOLENOID_OUTPUT_CHANNEL, SOLENOID_CHANNEL_4_BRIDGE_RAM_UP),
-		solenoidDumperRampUp(SOLENOID_OUTPUT_CHANNEL, SOLENOID_CHANNEL_5_DUMPER_RAMP_UP),
-		solenoidDumperRampDown(SOLENOID_OUTPUT_CHANNEL, SOLENOID_CHANNEL_6_DUMPER_RAMP_DOWN),
+		solenoidStingerExtend(SOLENOID_OUTPUT_CHANNEL, SOLENOID_CHANNEL_5_STINGER_EXTEND),
+		solenoidStingerRetract(SOLENOID_OUTPUT_CHANNEL, SOLENOID_CHANNEL_6_STINGER_RETRACT),
 		solenoidCatapultLatchExtend(SOLENOID_OUTPUT_CHANNEL, SOLENOID_CHANNEL_7_CATAPULT_LATCH_EXTEND),
 		solenoidCatapultLatchRetract(SOLENOID_OUTPUT_CHANNEL, SOLENOID_CHANNEL_8_CATAPULT_LATCH_RETRACT),
 		stickRightDrive(1),
@@ -724,9 +721,14 @@ public:
 				myRobot.TankDrive(AUTONOMOUS_FENDER_SHOT_SLOW,AUTONOMOUS_FENDER_SHOT_SLOW);
 				ManageElevator(false,false,true,false,true,false);
 			}
-			else
+			else if (autonomousStateTimer.Get() < 8.0)
 			{
 				myRobot.TankDrive(0.0,0.0);
+				ManageElevator(false,true,true,false,true,false);
+			}
+			else if (autonomousStateTimer.Get() < 12.0)
+			{
+				myRobot.TankDrive(-AUTONOMOUS_FENDER_SHOT_FAST,-AUTONOMOUS_FENDER_SHOT_FAST);
 				ManageElevator(false,true,true,false,true,false);
 			}
 		}
@@ -762,7 +764,7 @@ public:
 		CameraInitialize();
 
 		
-		ManageAppendages(BUTTON_LOWER_BRIDGE_RAM(),BUTTON_DUMPER_RAMP_EXTEND());
+		ManageAppendages(BUTTON_STINGER_TOGGLE(),BUTTON_STINGER_TOGGLE());
 		ManageElevator(BUTTON_ELEVATOR_BOTTOM_UP(), BUTTON_ELEVATOR_BOTTOM_DOWN(), 
 						BUTTON_ELEVATOR_TOP_UP(), BUTTON_ELEVATOR_TOP_DOWN(), 
 						BUTTON_DUMPER_ROLLER(), false);
@@ -774,19 +776,19 @@ public:
 
 
 /********************************** Continuous Routines *************************************/
-	void DisabledContinuous(void) 
-	{
-		//CameraInitialize();
-	}
-
-	void AutonomousContinuous(void)	
-	{
-		//AxisCamera &camera = AxisCamera::GetInstance("10.24.74.11");
-		//CameraInitialize();
-	}
-	void TeleopContinuous(void) 
-	{
-	}
+//	void DisabledContinuous(void) 
+//	{
+//		//CameraInitialize();
+//	}
+//
+//	void AutonomousContinuous(void)	
+//	{
+//		//AxisCamera &camera = AxisCamera::GetInstance("10.24.74.11");
+//		//CameraInitialize();
+//	}
+//	void TeleopContinuous(void) 
+//	{
+//	}
 
 	//returns 0 if a particle is found
 	int DetermineTargetPosition(ColorImage *colorImage)
@@ -890,15 +892,15 @@ public:
 	}
 	
 
-	void ManageAppendages(bool extend_bridge_ram, bool extend_dumper_ramp)
+	void ManageAppendages(bool extend_bridge_ram, bool extend_stinger)
 	{
 		typedef enum
 		{
 			APPENDAGE_IDLE,
 			APPENDAGE_BRIDGE_RAM_EXTENDED,
 			APPENDAGE_BRIDGE_RAM_RETRACTING,
-			APPENDAGE_DUMPER_RAMP_EXTENDED,
-			APPENDAGE_DUMPER_RAMP_RETRACTING
+			APPENDAGE_STINGER_EXTENDED,
+			APPENDAGE_STINGER_RETRACTING
 		}APPENDAGE_STATE;
 		
 		static int retracting_appendage_counter = 0;
@@ -909,8 +911,8 @@ public:
 		default:
 		case APPENDAGE_IDLE:
 			BRIDGE_RAM_EXTENDED(false);
-			DUMPER_RAMP_EXTENDED(false);
-			if (!extend_bridge_ram && !extend_dumper_ramp)
+			STINGER_EXTENDED(false);
+			if (!extend_bridge_ram && !extend_stinger)
 			{
 				trigger_released = true;
 			}
@@ -921,16 +923,16 @@ public:
 				BRIDGE_RAM_EXTENDED(true);
 				appendage_state = APPENDAGE_BRIDGE_RAM_EXTENDED;
 			}
-			else if (trigger_released && extend_dumper_ramp)
+			else if (trigger_released && extend_stinger)
 			{
 				trigger_released = false;
-				DUMPER_RAMP_EXTENDED(true);
-				appendage_state = APPENDAGE_DUMPER_RAMP_EXTENDED;
+				STINGER_EXTENDED(true);
+				appendage_state = APPENDAGE_STINGER_EXTENDED;
 			}
 			break;
 		case APPENDAGE_BRIDGE_RAM_EXTENDED:
 			BRIDGE_RAM_EXTENDED(true);
-			DUMPER_RAMP_EXTENDED(false);
+			STINGER_EXTENDED(false);
 
 			if (!extend_bridge_ram)
 			{
@@ -940,14 +942,14 @@ public:
 			{
 				trigger_released = false;
 				BRIDGE_RAM_EXTENDED(false);
-				DUMPER_RAMP_EXTENDED(false);
+				STINGER_EXTENDED(false);
 				retracting_appendage_counter = 0;
-				appendage_state = APPENDAGE_DUMPER_RAMP_RETRACTING;
+				appendage_state = APPENDAGE_STINGER_RETRACTING;
 			}
 			break;
 		case APPENDAGE_BRIDGE_RAM_RETRACTING:
 			BRIDGE_RAM_EXTENDED(false);
-			DUMPER_RAMP_EXTENDED(false);
+			STINGER_EXTENDED(false);
 			if (!extend_bridge_ram)
 			{
 				trigger_released = true;
@@ -959,28 +961,28 @@ public:
 				appendage_state = APPENDAGE_IDLE;
 			}
 			break;
-		case APPENDAGE_DUMPER_RAMP_EXTENDED:
+		case APPENDAGE_STINGER_EXTENDED:
 
 			BRIDGE_RAM_EXTENDED(false);
-			DUMPER_RAMP_EXTENDED(true);
+			STINGER_EXTENDED(true);
 
-			if (!extend_dumper_ramp)
+			if (!extend_stinger)
 			{
 				trigger_released = true;
 			}
-			if (trigger_released && extend_dumper_ramp)
+			if (trigger_released && extend_stinger)
 			{
 				trigger_released = false;
 				BRIDGE_RAM_EXTENDED(false);
-				DUMPER_RAMP_EXTENDED(false);
+				STINGER_EXTENDED(false);
 				retracting_appendage_counter = 0;
-				appendage_state = APPENDAGE_DUMPER_RAMP_RETRACTING;
+				appendage_state = APPENDAGE_STINGER_RETRACTING;
 			}
 			break;
-		case APPENDAGE_DUMPER_RAMP_RETRACTING:
+		case APPENDAGE_STINGER_RETRACTING:
 			BRIDGE_RAM_EXTENDED(false);
-			DUMPER_RAMP_EXTENDED(false);
-			if (!extend_dumper_ramp)
+			STINGER_EXTENDED(false);
+			if (!extend_stinger)
 			{
 				trigger_released = true;
 			}
