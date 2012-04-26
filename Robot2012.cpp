@@ -6,9 +6,6 @@
 #include "customPIDs.h"
 #include "AnalogRangeFinder.h"
 
-//Load a ball after 1.75 seconds and before 4.25 seconds
-//Load the last ball now at 6.0 seconds and before 8.5 seconds
-
 ////////////////////////////////////////////////////////
 // Defines and typedefs
 ////////////////////////////////////////////////////////
@@ -17,14 +14,14 @@
 #define SOLENOID_OUTPUT_CHANNEL 1	//in 2012 this should be in slot 3 (chan 1), or slot 6 (chan 2)
 
 #define CATAPULT_FIRE_TIME 1.0
-#define CATAPULT_REARM_TIME 1.75
-#define CATAPULT_RELOAD_TIME_FOUR_BALL 1.25
+#define CATAPULT_REARM_TIME 1.00
+#define CATAPULT_RELOAD_TIME_FOUR_BALL 2.00
 #define SLOW_PICKUP_DURING_RELOAD_START 0.25
 #define CATAPULT_LATCH_TIME 0.2
 
-//Loading from the floor occurs at times:  (note: ideally, drop at <1.0 and at 7.0)
+//Loading from the floor occurs at times:  (note: ideally, drop at <1.0 and at 6.25)
 //First ball time < 1.0 (CATAPULT_FIRE_TIME) sec or  3.0 (FIRE + REARM + SLOW_PICKUP) < time < 6.75 ( 1 FULL CYCLE + FIRE + REARM)
-//Second ball 7.0 < time < 10.75 (previous times + CYCLE_TIME)
+//Second ball 6.25 < time < 10.0 (previous times + CYCLE_TIME)
 
 //Generically ((CYCLE_TIME * EXTRA_BALL_NUM) - (RELOAD_TIME - SLOW_PICKUP)) < time < ((CYCLE_TIME * EXTRA_BALL_NUM) + FIRE_TIME + REARM_TIME) 
 
@@ -33,9 +30,11 @@
 
 #define AUTONOMOUS_BACKUP_SPEED_SLOW -0.45
 #define AUTONOMOUS_BACKUP_SPEED_FAST -0.7
-#define AUTONOMOUS_BACKUP_TIME_SLOW (1.6 + AUTONOMOUS_BACKUP_TIME_FAST)
+#define AUTONOMOUS_BACKUP_TIME_SLOW (2.05 + AUTONOMOUS_BACKUP_TIME_FAST)
 #define AUTONOMOUS_BACKUP_TIME_FAST (0.9 + AUTONOMOUS_BACKUP_TIME_WAIT)
 #define AUTONOMOUS_BACKUP_TIME_WAIT 1.0
+#define AUTONOMOUS_FENDER_SHOT_FAST (-0.55)
+#define AUTONOMOUS_FENDER_SHOT_SLOW (-0.3)
 //#define CATAPULT_PRELOAD_TIME_FOUR_BALL 0.1  	//How long we turn on the reload roller before the catapult finishes rearming
 //Fire 0.0sec
 //Rearm start 0.0sec
@@ -59,12 +58,13 @@
 #define SLOW_TURN 0.30F
 #define FAST_TURN 0.40F
 
-#define ELEVATOR_SPEED_BOTTOM 0.6F
+#define ELEVATOR_SPEED_BOTTOM 0.8F
 #define ELEVATOR_SPEED_BOTTOM_SLOW 0.3F
 #define ELEVATOR_SPEED_TOP 1.0F
-#define DUMPER_ROLLER_RPM 1500.0F
+#define DUMPER_ROLLER_RPM 4100.0F
+#define DUMPER_ROLLER_POWER 0.725
 #define DUMPER_ROLLER_COUNTS_PER_REVOLUTION (400)  //This is a property of the encoder we bought, don't change
-#define DUMPER_ROLLER_FILTER_CONSTANT 0.0
+#define DUMPER_ROLLER_FILTER_CONSTANT 0.1
 #define DUMPER_ROLLER_VOLTAGE_RAMP_RATE 0.19
 
 
@@ -102,7 +102,8 @@
 #define BUTTON_DUMPER_RAMP_EXTEND() stickShooter.GetRawButton(9)
 #define BUTTON_DUMPER_ROLLER() stickShooter.GetRawButton(11)
 
-#define BUTTON_LOWER_BRIDGE_RAM() stickLeftDrive.GetTop()
+#define BUTTON_BRIDGE_RAM_TOGGLE() stickLeftDrive.GetTop()
+#define BUTTON_STINGER_TOGGLE() stickLeftDrive.GetTrigger()
 
 //#define BUTTON_COMBO_SWITCH_AUTONOMOUS() (stickShooter.GetTrigger() && stickLeftDrive.GetTrigger() && stickRightDrive.GetTrigger())
 #define BUTTON_COMBO_SWITCH_AUTONOMOUS() (stickRightDrive.GetTrigger())
@@ -166,7 +167,7 @@
 
 
 //Helper Macros
-#define DUMPER_RAMP_EXTENDED(isExtended) {FlipSolenoids(isExtended, &solenoidDumperRampUp, &solenoidDumperRampDown);}
+#define STINGER_EXTENDED(isExtended) {FlipSolenoids(isExtended, &solenoidStingerExtend, &solenoidStingerRetract);}
 #define BRIDGE_RAM_EXTENDED(isExtended) {FlipSolenoids(isExtended, &solenoidBridgeRamDown, &solenoidBridgeRamUp);}
 #define CATAPULT_PUSHER_EXTENDED(isExtended) {FlipSolenoids(isExtended, &solenoidCatapultPusher, &solenoidCatapultPuller);}
 #define CATAPULT_LATCH_EXTENDED(isExtended) {FlipSolenoids(isExtended, &solenoidCatapultLatchExtend, &solenoidCatapultLatchRetract);}
@@ -185,15 +186,15 @@ typedef enum
 }PWM_CHANNEL_TYPE;
 
 #define BOTTOM_ROLLERS_SYNC_GROUP 1
-
+ 
 typedef enum
 {
 	SOLENOID_CHANNEL_1_CATAPULT_PUSHER = 1,
 	SOLENOID_CHANNEL_2_CATAPULT_PULLER,
 	SOLENOID_CHANNEL_3_BRIDGE_RAM_DOWN,
 	SOLENOID_CHANNEL_4_BRIDGE_RAM_UP,
-	SOLENOID_CHANNEL_5_DUMPER_RAMP_UP,
-	SOLENOID_CHANNEL_6_DUMPER_RAMP_DOWN,
+	SOLENOID_CHANNEL_5_STINGER_EXTEND,
+	SOLENOID_CHANNEL_6_STINGER_RETRACT,
 	SOLENOID_CHANNEL_7_CATAPULT_LATCH_EXTEND,
 	SOLENOID_CHANNEL_8_CATAPULT_LATCH_RETRACT
 }SOLENOID_CHANNEL_TYPE;
@@ -251,8 +252,8 @@ class Robot2012 : public IterativeRobot
 	Solenoid solenoidCatapultPuller;
 	Solenoid solenoidBridgeRamDown;
 	Solenoid solenoidBridgeRamUp;
-	Solenoid solenoidDumperRampUp;
-	Solenoid solenoidDumperRampDown;
+	Solenoid solenoidStingerExtend;
+	Solenoid solenoidStingerRetract;
 	Solenoid solenoidCatapultLatchExtend;
 	Solenoid solenoidCatapultLatchRetract;
 	Joystick stickRightDrive; // only joystick
@@ -291,19 +292,10 @@ class Robot2012 : public IterativeRobot
 	{
 		AUTONOMOUS_LINING_UP_SHOT,
 		AUTONOMOUS_FIRING_SHOT,
+		AUTONOMOUS_SHOT_FIRED,
 		AUTONOMOUS_REARMING_SHOT,
 		AUTONOMOUS_RELOADING,
-		AUTONOMOUS_SHOOTING_SECOND_SHOT,
-#ifdef ENABLE_FOUR_SHOT_SUPER_AUTONOMOUS		
-		AUTONOMOUS_REARMING_SECOND_SHOT,
-		AUTONOMOUS_RELOADING_FOR_THIRD,
-		AUTONOMOUS_SHOOTING_THIRD_SHOT,
-		AUTONOMOUS_REARMING_THIRD_SHOT,
-		AUTONOMOUS_RELOADING_FOR_FOURTH,
-		AUTONOMOUS_SHOOTING_FOURTH_SHOT,
-#endif
 		AUTONOMOUS_HITTING_BRIDGE,
-		AUTONOMOUS_WAIT_FOR_TELEOP,
 		AUTONOMOUS_DONE,
 		
 	}AUTONOMOUS_STATE;
@@ -315,7 +307,9 @@ class Robot2012 : public IterativeRobot
 		AUTONOMOUS_MODE_TWO_BALL,
 		AUTONOMOUS_MODE_FOUR_BALL,
 		AUTONOMOUS_MODE_SIX_BALL,
-		AUTONOMOUS_MODE_FEED
+		AUTONOMOUS_MODE_FEED,
+		AUTONOMOUS_MODE_FENDER_SHOTS,
+		AUTONOMOUS_MODE_THREE_BALL
 	}AUTONOMOUS_MODE_SELECT;
 		
 	AUTONOMOUS_MODE_SELECT autonomousMode;
@@ -328,7 +322,7 @@ class Robot2012 : public IterativeRobot
 		CATAPULT_FIRING
 	}CATAPULT_STATE;
 	
-	static CATAPULT_STATE catapultState;
+	CATAPULT_STATE catapultState;
 public:
 
 	Robot2012(void):
@@ -346,8 +340,8 @@ public:
 		solenoidCatapultPuller(SOLENOID_OUTPUT_CHANNEL, SOLENOID_CHANNEL_2_CATAPULT_PULLER),
 		solenoidBridgeRamDown(SOLENOID_OUTPUT_CHANNEL, SOLENOID_CHANNEL_3_BRIDGE_RAM_DOWN),
 		solenoidBridgeRamUp(SOLENOID_OUTPUT_CHANNEL, SOLENOID_CHANNEL_4_BRIDGE_RAM_UP),
-		solenoidDumperRampUp(SOLENOID_OUTPUT_CHANNEL, SOLENOID_CHANNEL_5_DUMPER_RAMP_UP),
-		solenoidDumperRampDown(SOLENOID_OUTPUT_CHANNEL, SOLENOID_CHANNEL_6_DUMPER_RAMP_DOWN),
+		solenoidStingerExtend(SOLENOID_OUTPUT_CHANNEL, SOLENOID_CHANNEL_5_STINGER_EXTEND),
+		solenoidStingerRetract(SOLENOID_OUTPUT_CHANNEL, SOLENOID_CHANNEL_6_STINGER_RETRACT),
 		solenoidCatapultLatchExtend(SOLENOID_OUTPUT_CHANNEL, SOLENOID_CHANNEL_7_CATAPULT_LATCH_EXTEND),
 		solenoidCatapultLatchRetract(SOLENOID_OUTPUT_CHANNEL, SOLENOID_CHANNEL_8_CATAPULT_LATCH_RETRACT),
 		stickRightDrive(1),
@@ -390,8 +384,6 @@ public:
 		rangePID.SetTolerance(RANGE_PID_TOLERENCE);
 		rangePID.Disable();
 		
-		catapultState = CATAPULT_READY;
-		autonomousMode = AUTONOMOUS_MODE_TWO_BALL_AND_TIP;
 				
 		
 		printf("Robot2012 Constructor Completed\n");
@@ -405,10 +397,13 @@ public:
 		// Actions which would be performed once (and only once) upon initialization of the
 		// robot would be put here.
 		
-		printf("RobotInit() completed.\n");
+
+		catapultState = CATAPULT_READY;
+		autonomousMode = AUTONOMOUS_MODE_TWO_BALL_AND_TIP;
 		
 		timeSinceBoot.Start();
 		myRobot.SetExpiration(1.0);
+		printf("RobotInit() completed.\n");
 	}
 	
 	void DisabledInit(void) 
@@ -474,18 +469,18 @@ public:
 					
 				{
 					SetRIOUserLED(1);
-					driverStationLCD->PrintfLine((DriverStationLCD::Line) 0, "Camera is ON target");
+					//driverStationLCD->PrintfLine((DriverStationLCD::Line) 0, "Camera is ON target");
 				}
 				else
 				{
 					SetRIOUserLED(0);
-					driverStationLCD->PrintfLine((DriverStationLCD::Line) 0, "Camera is OFF target");
+					//driverStationLCD->PrintfLine((DriverStationLCD::Line) 0, "Camera is OFF target");
 				}
 			}
 			else
 			{
 				SetRIOUserLED(0);
-				driverStationLCD->PrintfLine((DriverStationLCD::Line) 0, "Camera is OFF target");
+				//driverStationLCD->PrintfLine((DriverStationLCD::Line) 0, "Camera is OFF target");
 			}
 			delete colorImage;
 		}
@@ -501,7 +496,7 @@ public:
 			button_combo_timer.Stop();
 		}
 		
-		if (button_combo_timer.Get() > 3.00)
+		if (button_combo_timer.Get() > 2.00)
 		{
 			button_combo_timer.Reset();
 			switch (autonomousMode)
@@ -510,6 +505,9 @@ public:
 				autonomousMode = AUTONOMOUS_MODE_TWO_BALL;
 				break;
 			case AUTONOMOUS_MODE_TWO_BALL:
+				autonomousMode = AUTONOMOUS_MODE_THREE_BALL;
+				break;
+			case AUTONOMOUS_MODE_THREE_BALL:
 				autonomousMode = AUTONOMOUS_MODE_FOUR_BALL;
 				break;
 			case AUTONOMOUS_MODE_FOUR_BALL:
@@ -519,6 +517,10 @@ public:
 				autonomousMode = AUTONOMOUS_MODE_FEED;
 				break;
 			case AUTONOMOUS_MODE_FEED:
+				autonomousMode = AUTONOMOUS_MODE_FENDER_SHOTS;
+				break;
+			default:
+			case AUTONOMOUS_MODE_FENDER_SHOTS:
 				autonomousMode = AUTONOMOUS_MODE_TWO_BALL_AND_TIP;
 				break;
 			}
@@ -542,22 +544,28 @@ public:
 		case AUTONOMOUS_MODE_TWO_BALL:
 			driverStationLCD->PrintfLine((DriverStationLCD::Line) 1, "Using 2 ball NO BRIDGE TIP");
 			break;
+		case AUTONOMOUS_MODE_THREE_BALL:
+			driverStationLCD->PrintfLine((DriverStationLCD::Line) 1, "Using 3 ball NO BRIDGE TIP");
+			break;
 		case AUTONOMOUS_MODE_FEED:
 			driverStationLCD->PrintfLine((DriverStationLCD::Line) 1, "Autonomous Feeding balls");
+			break;
+		case AUTONOMOUS_MODE_FENDER_SHOTS:
+			driverStationLCD->PrintfLine((DriverStationLCD::Line) 1, "Shooting from the fender");
 			break;
 		}
 		driverStationLCD->UpdateLCD();
 	}
 
-	bool AlternateAutonomous(bool hit_bridge, int number_of_shots)
+	bool CatapultAutonomous(bool hit_bridge, int number_of_shots)
 	{
 		bool running_auton = false;
 		static int shots_fired;
-		if (m_autoPeriodicLoops == 0)
+		if (m_autoPeriodicLoops < 2)
 		{
 			shots_fired = 0;
 		}
-		
+		bool use_slow_roller = ((number_of_shots > 2) && (shots_fired < number_of_shots));
 		if (shots_fired < number_of_shots)
 		{
 			running_auton = true;
@@ -568,10 +576,12 @@ public:
 			{
 			default:
 			case AUTONOMOUS_FIRING_SHOT:
-				autonomousState = AUTONOMOUS_FIRING_SHOT;
-				ManageElevator(false,false,false,false,false,true);
 				ManageCatapult(true, true);
 				shots_fired++;
+			case AUTONOMOUS_SHOT_FIRED:
+				autonomousState = AUTONOMOUS_SHOT_FIRED;
+				ManageCatapult(false, false);
+				ManageElevator(false,false,false,false,false,use_slow_roller);
 				if (catapultState == CATAPULT_COCKING)
 				{
 					autonomousState = AUTONOMOUS_REARMING_SHOT;
@@ -581,7 +591,7 @@ public:
 			case AUTONOMOUS_REARMING_SHOT:
 				ManageAppendages(false,false);
 
-				//For the first shot, don't slow reload because it could jam the loading of ball 2
+				//For the first shot, don't pickup from the floor because it could jam the loading of ball 2
 				if (shots_fired < 2)
 				{
 					ManageElevator(false,false,false,false,false,false);
@@ -604,7 +614,7 @@ public:
 				ManageAppendages(false,false);
 				if (autonomousStateTimer.Get() > SLOW_PICKUP_DURING_RELOAD_START)
 				{
-					ManageElevator(false,false,false,true,false,true);
+					ManageElevator(false,false,false,true,false,use_slow_roller);
 				}
 				else
 				{
@@ -616,7 +626,7 @@ public:
 				{
 					ManageCatapult(false, false);
 					autonomousStateTimer.Reset();
-					autonomousState = AUTONOMOUS_SHOOTING_SECOND_SHOT;
+					autonomousState = AUTONOMOUS_FIRING_SHOT;
 				}
 				break;
 			}
@@ -658,52 +668,81 @@ public:
 		CameraInitialize();
 		if (autonomousMode == AUTONOMOUS_MODE_TWO_BALL_AND_TIP)
 		{
-			if (AlternateAutonomous(true,2))
+			if (CatapultAutonomous(true,2))
 				return;
 		}
 		else if(autonomousMode == AUTONOMOUS_MODE_TWO_BALL)
 		{
-			if (AlternateAutonomous(false,2))
+			if (CatapultAutonomous(false,2))
+				return;
+		}
+		else if (autonomousMode == AUTONOMOUS_MODE_THREE_BALL)
+		{
+			if (CatapultAutonomous(false, 3))
 				return;
 		}
 		else if (autonomousMode == AUTONOMOUS_MODE_FOUR_BALL)
 		{
-			if (AlternateAutonomous(false,4))
+			if (CatapultAutonomous(false,4))
 				return;
 		}
 		else if (autonomousMode == AUTONOMOUS_MODE_SIX_BALL)
 		{
-			if (AlternateAutonomous(false, 6))
+			if (CatapultAutonomous(false, 6))
 				return;
 		}
 		else if (autonomousMode == AUTONOMOUS_MODE_FEED)
 		{
 			autonomousStateTimer.Start();
-			if (autonomousStateTimer.Get() > 5.5)
-			{
-				ManageElevator(false,false,false,false,false,false);
-			}
-			else if (autonomousStateTimer.Get() > 3.5)
+			if (autonomousStateTimer.Get() > 7.0)
 			{
 				ManageElevator(false,true,false,true,false,false);
 				return;
 			}
-			else if (autonomousStateTimer.Get() > 1.0)
+			else if (autonomousStateTimer.Get() > 5.0)
 			{
 				ManageElevator(false,true,false,false,false,false);
 				return;
+			}
+			else
+			{
+				ManageElevator(false,false,false,false,false,false);
+			}
+		}
+		else if (autonomousMode == AUTONOMOUS_MODE_FENDER_SHOTS)
+		{
+			autonomousStateTimer.Start();
+			if (autonomousStateTimer.Get() < 3.5)
+			{
+				myRobot.TankDrive(AUTONOMOUS_FENDER_SHOT_FAST,AUTONOMOUS_FENDER_SHOT_FAST);
+				ManageElevator(false,false,false,false,true,false);
+			}
+			else if (autonomousStateTimer.Get() < 4.0)
+			{
+				myRobot.TankDrive(AUTONOMOUS_FENDER_SHOT_SLOW,AUTONOMOUS_FENDER_SHOT_SLOW);
+				ManageElevator(false,false,true,false,true,false);
+			}
+			else if (autonomousStateTimer.Get() < 8.0)
+			{
+				myRobot.TankDrive(0.0,0.0);
+				ManageElevator(false,true,true,false,true,false);
+			}
+			else if (autonomousStateTimer.Get() < 12.0)
+			{
+				myRobot.TankDrive(-AUTONOMOUS_FENDER_SHOT_FAST,-AUTONOMOUS_FENDER_SHOT_FAST);
+				ManageElevator(false,true,true,false,true,false);
 			}
 		}
 		
 		//If we didn't return above, allow the kinect to function
 		if (KINECT_CONTROL_ENABLED() == true)
-		{
+		{ 
 			myRobot.TankDrive(kinectLeft.GetY() * 0.7, kinectRight.GetY() * 0.7);
 			//add code to bind each kinectStick button to each action we want to be able to do in autonomous
 			//ManageAppendages(KINECT_RIGHT_LEG_BACK(),false);
 			BRIDGE_RAM_EXTENDED(KINECT_BRIDGE_RAM_EXTEND());
 			ManageElevator((KINECT_ELEVATORS_UP() || KINECT_BRIDGE_RAM_EXTEND()),KINECT_ELEVATORS_DOWN(),
-					KINECT_ELEVATORS_UP(),KINECT_ELEVATORS_DOWN(),
+					KINECT_ELEVATORS_UP(),KINECT_ELEVATORS_DOWN(), 
 					KINECT_ELEVATORS_UP(),false);
 			PositionForTarget(false);
 			ManageCatapult(false, false);
@@ -726,7 +765,7 @@ public:
 		CameraInitialize();
 
 		
-		ManageAppendages(BUTTON_LOWER_BRIDGE_RAM(),BUTTON_DUMPER_RAMP_EXTEND());
+		ManageAppendages(BUTTON_BRIDGE_RAM_TOGGLE(),BUTTON_STINGER_TOGGLE());
 		ManageElevator(BUTTON_ELEVATOR_BOTTOM_UP(), BUTTON_ELEVATOR_BOTTOM_DOWN(), 
 						BUTTON_ELEVATOR_TOP_UP(), BUTTON_ELEVATOR_TOP_DOWN(), 
 						BUTTON_DUMPER_ROLLER(), false);
@@ -738,19 +777,19 @@ public:
 
 
 /********************************** Continuous Routines *************************************/
-	void DisabledContinuous(void) 
-	{
-		//CameraInitialize();
-	}
-
-	void AutonomousContinuous(void)	
-	{
-		//AxisCamera &camera = AxisCamera::GetInstance("10.24.74.11");
-		//CameraInitialize();
-	}
-	void TeleopContinuous(void) 
-	{
-	}
+//	void DisabledContinuous(void) 
+//	{
+//		//CameraInitialize();
+//	}
+//
+//	void AutonomousContinuous(void)	
+//	{
+//		//AxisCamera &camera = AxisCamera::GetInstance("10.24.74.11");
+//		//CameraInitialize();
+//	}
+//	void TeleopContinuous(void) 
+//	{
+//	}
 
 	//returns 0 if a particle is found
 	int DetermineTargetPosition(ColorImage *colorImage)
@@ -854,15 +893,15 @@ public:
 	}
 	
 
-	void ManageAppendages(bool extend_bridge_ram, bool extend_dumper_ramp)
+	void ManageAppendages(bool extend_bridge_ram, bool extend_stinger)
 	{
 		typedef enum
 		{
 			APPENDAGE_IDLE,
 			APPENDAGE_BRIDGE_RAM_EXTENDED,
 			APPENDAGE_BRIDGE_RAM_RETRACTING,
-			APPENDAGE_DUMPER_RAMP_EXTENDED,
-			APPENDAGE_DUMPER_RAMP_RETRACTING
+			APPENDAGE_STINGER_EXTENDED,
+			APPENDAGE_STINGER_RETRACTING
 		}APPENDAGE_STATE;
 		
 		static int retracting_appendage_counter = 0;
@@ -873,8 +912,8 @@ public:
 		default:
 		case APPENDAGE_IDLE:
 			BRIDGE_RAM_EXTENDED(false);
-			DUMPER_RAMP_EXTENDED(false);
-			if (!extend_bridge_ram && !extend_dumper_ramp)
+			STINGER_EXTENDED(false);
+			if (!extend_bridge_ram && !extend_stinger)
 			{
 				trigger_released = true;
 			}
@@ -885,16 +924,16 @@ public:
 				BRIDGE_RAM_EXTENDED(true);
 				appendage_state = APPENDAGE_BRIDGE_RAM_EXTENDED;
 			}
-			else if (trigger_released && extend_dumper_ramp)
+			else if (trigger_released && extend_stinger)
 			{
 				trigger_released = false;
-				DUMPER_RAMP_EXTENDED(true);
-				appendage_state = APPENDAGE_DUMPER_RAMP_EXTENDED;
+				STINGER_EXTENDED(true);
+				appendage_state = APPENDAGE_STINGER_EXTENDED;
 			}
 			break;
 		case APPENDAGE_BRIDGE_RAM_EXTENDED:
 			BRIDGE_RAM_EXTENDED(true);
-			DUMPER_RAMP_EXTENDED(false);
+			STINGER_EXTENDED(false);
 
 			if (!extend_bridge_ram)
 			{
@@ -904,14 +943,14 @@ public:
 			{
 				trigger_released = false;
 				BRIDGE_RAM_EXTENDED(false);
-				DUMPER_RAMP_EXTENDED(false);
+				STINGER_EXTENDED(false);
 				retracting_appendage_counter = 0;
-				appendage_state = APPENDAGE_DUMPER_RAMP_RETRACTING;
+				appendage_state = APPENDAGE_STINGER_RETRACTING;
 			}
 			break;
 		case APPENDAGE_BRIDGE_RAM_RETRACTING:
 			BRIDGE_RAM_EXTENDED(false);
-			DUMPER_RAMP_EXTENDED(false);
+			STINGER_EXTENDED(false);
 			if (!extend_bridge_ram)
 			{
 				trigger_released = true;
@@ -923,28 +962,28 @@ public:
 				appendage_state = APPENDAGE_IDLE;
 			}
 			break;
-		case APPENDAGE_DUMPER_RAMP_EXTENDED:
+		case APPENDAGE_STINGER_EXTENDED:
 
 			BRIDGE_RAM_EXTENDED(false);
-			DUMPER_RAMP_EXTENDED(true);
+			STINGER_EXTENDED(true);
 
-			if (!extend_dumper_ramp)
+			if (!extend_stinger)
 			{
 				trigger_released = true;
 			}
-			if (trigger_released && extend_dumper_ramp)
+			if (trigger_released && extend_stinger)
 			{
 				trigger_released = false;
 				BRIDGE_RAM_EXTENDED(false);
-				DUMPER_RAMP_EXTENDED(false);
+				STINGER_EXTENDED(false);
 				retracting_appendage_counter = 0;
-				appendage_state = APPENDAGE_DUMPER_RAMP_RETRACTING;
+				appendage_state = APPENDAGE_STINGER_RETRACTING;
 			}
 			break;
-		case APPENDAGE_DUMPER_RAMP_RETRACTING:
+		case APPENDAGE_STINGER_RETRACTING:
 			BRIDGE_RAM_EXTENDED(false);
-			DUMPER_RAMP_EXTENDED(false);
-			if (!extend_dumper_ramp)
+			STINGER_EXTENDED(false);
+			if (!extend_stinger)
 			{
 				trigger_released = true;
 			}
@@ -1013,41 +1052,54 @@ public:
 		
 		float roller_rpm = GetRollerVelocity(dumper_roller);
 		
-		driverStationLCD->PrintfLine((DriverStationLCD::Line) 4, "Roller RPM: %f", roller_rpm);
+		driverStationLCD->PrintfLine((DriverStationLCD::Line) 3, "Roller RPM: %f", roller_rpm);
 		driverStationLCD->UpdateLCD();
 		
 		if (dumper_roller)
 		{
-#if 0
-			if (roller_rpm < DUMPER_ROLLER_RPM)
+#ifdef DUMPER_ROLLER_RPM
+			if (!BUTTON_CATAPULT_FORCE_SHOOT())
 			{
-				if (dumper_roller_power < (1 - DUMPER_ROLLER_VOLTAGE_RAMP_RATE))
+				if (roller_rpm < DUMPER_ROLLER_RPM)
 				{
-					dumper_roller_power += DUMPER_ROLLER_VOLTAGE_RAMP_RATE;
+					if (dumper_roller_power < (1 - DUMPER_ROLLER_VOLTAGE_RAMP_RATE))
+					{
+						dumper_roller_power += DUMPER_ROLLER_VOLTAGE_RAMP_RATE;
+					}
+					else
+					{
+						dumper_roller_power = 1.0F;
+					}
 				}
 				else
 				{
-					dumper_roller_power = 1.0F;
+					if (dumper_roller_power > DUMPER_ROLLER_VOLTAGE_RAMP_RATE)
+					{
+						dumper_roller_power -= DUMPER_ROLLER_VOLTAGE_RAMP_RATE;
+					}
+					else
+					{
+						dumper_roller_power = 0.0F;
+					}
 				}
 			}
 			else
-			{
-				if (dumper_roller_power > DUMPER_ROLLER_VOLTAGE_RAMP_RATE)
-				{
-					dumper_roller_power -= DUMPER_ROLLER_VOLTAGE_RAMP_RATE;
-				}
-				else
-				{
-					dumper_roller_power = 0.0F;
-				}
-			}
-#else
-			dumper_roller_power = 0.75;
 #endif
+			{
+				dumper_roller_power = DUMPER_ROLLER_POWER;
+			}
+			if (compressor.Enabled() == true)
+			{
+				compressor.Stop();
+			}
 		}
 		else
 		{
-			dumper_roller_power = 0.0;
+			dumper_roller_power = 0.0;			
+			if (compressor.Enabled() == false)
+			{
+				compressor.Start();
+			}
 		}
 		victorDumperRoller.Set(dumper_roller_power);
 	}
@@ -1058,13 +1110,14 @@ public:
 		static Timer state_timer;
 		state_timer.Start();//Doesn't do anything unless it's not running
 		
+		if (!catapult_shoot)button_released = true;
+		
 		switch (catapultState)
 		{
 		case CATAPULT_COCKING:
 			CATAPULT_PUSHER_EXTENDED(true);
 			CATAPULT_LATCH_EXTENDED(false);
-			if (!catapult_shoot)button_released = true;
-			if (state_timer.Get() >= CATAPULT_REARM_TIME);
+			if (state_timer.Get() >= CATAPULT_REARM_TIME)
 			{
 				state_timer.Reset();
 				catapultState = CATAPULT_WAITING_LATCH;
@@ -1073,7 +1126,6 @@ public:
 		case CATAPULT_WAITING_LATCH:
 			CATAPULT_PUSHER_EXTENDED(false);
 			CATAPULT_LATCH_EXTENDED(true);
-			if (!catapult_shoot)button_released = true;
 			if (state_timer.Get() > CATAPULT_LATCH_TIME)
 			{
 				state_timer.Reset();
@@ -1081,7 +1133,6 @@ public:
 			}
 			break;
 		case CATAPULT_READY:
-			if (!catapult_shoot)button_released = true;
 			if (catapult_shoot && button_released)
 			{
 				if ((force_shoot == true) || (targetLocked == true)) 
@@ -1095,11 +1146,10 @@ public:
 		case CATAPULT_FIRING:
 			CATAPULT_PUSHER_EXTENDED(false);
 			CATAPULT_LATCH_EXTENDED(false);
-			if (!catapult_shoot)button_released = true;
 			if (state_timer.Get() >= CATAPULT_FIRE_TIME)
 			{
 				state_timer.Reset();
-				CATAPULT_PUSHER_EXTENDED(true);
+				//CATAPULT_PUSHER_EXTENDED(true);
 				catapultState = CATAPULT_COCKING;
 			}
 			break;
@@ -1299,10 +1349,10 @@ public:
 		static float filtered_rpm = 0;
 		float return_rpm = 0;
 		
-		counterDumperRoller.Start();
 		if (prev_time == 0)
 		{
 			prev_time = GetFPGATime();
+			counterDumperRoller.Start();
 			return return_rpm;
 		}
 		
@@ -1310,6 +1360,7 @@ public:
 		{
 			UINT32 time_difference = GetFPGATime() - prev_time;
 			INT32 count = counterDumperRoller.Get();
+			driverStationLCD->PrintfLine((DriverStationLCD::Line) 1, "Roller count: %d", count);
 			//Filter the incoming speed against previous speed to get a 
 			float current_rpm = ((float)count) / ((float)(((float)DUMPER_ROLLER_COUNTS_PER_REVOLUTION/(float)FPGA_TIME_TO_MINUTES_FACTOR) * time_difference)); 
 			filtered_rpm = (current_rpm * (1 - DUMPER_ROLLER_FILTER_CONSTANT)) + (filtered_rpm * DUMPER_ROLLER_FILTER_CONSTANT);
